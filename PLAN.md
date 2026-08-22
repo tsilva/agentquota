@@ -4,6 +4,12 @@
 
 Build a dependency-free native SwiftUI menu-bar app for macOS 26 that displays the current Codex subscription quota. It will use the installed Codex CLI’s local app-server protocol, target developer/Xcode builds, and support Codex only.
 
+## Implementation Design Reference
+
+- Use [`docs/reference/codex-weekly-quota-widget.png`](docs/reference/codex-weekly-quota-widget.png) as the implementation design for the menu-bar item and popover.
+- Match the screenshot’s visual hierarchy, compact dimensions, spacing, typography, progress treatment, dark translucent material, menu-bar presentation, and placement of status and update information as closely as native SwiftUI and macOS accessibility conventions allow.
+- Where the screenshot’s sample copy or values differ from the functional requirements below, preserve the screenshot’s visual design while following the specified quota semantics, states, labels, and actions.
+
 ## Implementation
 
 - Create an Xcode 26 Swift application targeting macOS 26 with bundle identifier `com.tsilva.AgentQuota`.
