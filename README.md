@@ -1,70 +1,54 @@
-# AgentQuota
+<p align="center">
+  <img src="logo.png" alt="AgentQuota" width="520" />
+  <br />
+  <strong>🤖 Know your Codex quota at a glance 📊</strong>
+</p>
 
-AgentQuota is a native, dependency-free SwiftUI menu-bar app for macOS 26. It shows the lowest remaining percentage across the active Codex subscription quota windows and reads that data through the installed Codex CLI's local app-server protocol.
+AgentQuota is a native macOS menu-bar app for developers who use Codex. It keeps the tightest active subscription quota visible and opens a compact breakdown of every available quota window, reset time, and connection state.
 
-![AgentQuota design reference](docs/reference/codex-weekly-quota-widget.png)
+The app reads quota data through the installed Codex CLI's local app-server protocol. It has no third-party dependencies and does not persist quota or authentication data.
 
-## Requirements
+## Install
 
-- macOS 26
-- Xcode 26
-- A current Codex CLI installation
-- An authenticated Codex account
+Requires macOS 26, Xcode 26, and a current Codex CLI installation.
 
-AgentQuota is intentionally a developer build. It uses local/ad-hoc signing, is not sandboxed, and has no notarized public release pipeline in v1.
-
-## Build and run
-
-1. Install Codex CLI and sign in:
-
-   ```sh
-   codex login
-   ```
-
-2. Open `AgentQuota.xcodeproj` in Xcode 26.
-3. Select the **AgentQuota** scheme and **My Mac** destination.
-4. Choose **Run**.
-
-The app appears only in the menu bar. It intentionally has no Dock icon or conventional application window.
-
-You can also build and test from Terminal:
-
-```sh
-xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS' build
-xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS' test
+```bash
+git clone https://github.com/tsilva/agentquota.git
+cd agentquota
+codex login
+open AgentQuota.xcodeproj
 ```
 
-## Codex discovery
+In Xcode, select the **AgentQuota** scheme and **My Mac** destination, then choose **Run**. AgentQuota appears in the menu bar rather than the Dock.
 
-AgentQuota searches the inherited `PATH` first, followed by these locations:
+## Commands
 
-- `~/.superset/bin/codex`
-- `~/.local/bin/codex`
-- `/opt/homebrew/bin/codex`
-- `/usr/local/bin/codex`
+Run these commands from the repository root:
 
-The discovered file must exist and be executable. AgentQuota does not provide a binary picker.
+```bash
+xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS' build  # build the app
+xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS' test   # run the tests
+```
 
-## How it works
+## Notes
 
-AgentQuota runs `codex app-server --stdio` as a managed child process. It initializes the newline-delimited JSON-RPC connection, requests `account/rateLimits/read`, and refreshes when Codex emits `account/rateLimits/updated`. It also polls every 60 seconds, refreshes when the menu opens, and supports manual refresh.
-
-Quota and authentication data are never persisted. The current snapshot remains in memory during transient failures and is marked stale after two minutes. Quitting AgentQuota terminates the child app-server process.
+- AgentQuota finds `codex` on `PATH`, then checks `~/.superset/bin`, `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`.
+- It refreshes when the menu opens, when Codex reports a quota update, every 60 seconds, or when you refresh manually.
+- The last successful snapshot stays in memory during transient failures and becomes stale after two minutes.
+- Reconnect attempts back off through 1, 2, 5, and 30 seconds.
+- This is an unsandboxed, locally signed developer build because it must run the local Codex executable. There is no notarized public release pipeline.
 
 ## Troubleshooting
 
-### Codex CLI was not found
+- **Codex CLI not found:** confirm `codex --version` works, then reopen Xcode and choose **Retry**.
+- **Sign-in required:** run `codex login`, finish authentication, and choose **Retry**.
+- **Quota reporting unsupported:** update the Codex CLI and choose **Retry**.
+- **App-server or network failure:** use **Refresh** or **Retry**; AgentQuota keeps the latest in-memory snapshot while reconnecting.
 
-Confirm `codex --version` works in Terminal and that the binary is executable in one of the discovery paths above. If Xcode was opened before your shell configuration changed, quit and reopen Xcode, then choose **Retry** in AgentQuota.
+## Architecture
 
-### Sign-in required
+![AgentQuota architecture](architecture.png)
 
-Run `codex login` in Terminal and complete authentication, then choose **Retry**.
+## License
 
-### Quota reporting is unsupported
-
-Update the Codex CLI and choose **Retry**. The app-server protocol is version-sensitive, so AgentQuota detects unsupported methods instead of relying on a hard-coded CLI version.
-
-### Network or app-server failure
-
-AgentQuota retains the last successful in-memory snapshot and reconnects after 1, 2, 5, then 30 seconds. Manual **Refresh** or **Retry** starts another attempt immediately.
+[MIT](LICENSE)
