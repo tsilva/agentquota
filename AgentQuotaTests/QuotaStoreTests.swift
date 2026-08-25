@@ -48,6 +48,22 @@ final class QuotaStoreTests: XCTestCase {
         XCTAssertEqual(store.lastUpdatedDescription, "Updated now")
     }
 
+    func testForcedRefreshResetsLastUpdatedAfterIdenticalRead() async {
+        let base = Date(timeIntervalSince1970: 10_000)
+        var now = base
+        let client = FakeQuotaClient(readResults: [
+            .success(snapshot(remaining: 59, updatedAt: base)),
+            .success(snapshot(remaining: 59, updatedAt: base))
+        ])
+        let store = QuotaStore(clientFactory: { client }, now: { now })
+
+        await store.refresh()
+        now = base.addingTimeInterval(37 * 60)
+        await store.forceRefresh()
+
+        XCTAssertEqual(store.lastUpdatedDescription, "Updated now")
+    }
+
     func testLastUpdatedUsesNowOnlyForTheFirstMinute() async {
         let base = Date(timeIntervalSince1970: 10_000)
         let clientAt59Seconds = FakeQuotaClient(readResults: [

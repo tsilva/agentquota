@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Release"
+  short_description: "Auto-version and publish AgentQuota releases"
+  default_prompt: "Use $build-release to select the next version automatically, then build, verify, package, and publish an AgentQuota GitHub release."
