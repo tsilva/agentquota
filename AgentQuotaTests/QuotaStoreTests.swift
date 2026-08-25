@@ -16,6 +16,84 @@ final class QuotaStoreTests: XCTestCase {
         XCTAssertEqual(client.readCount, 1)
     }
 
+    func testLastUpdatedTracksQuotaChangesInsteadOfIdenticalReads() async {
+        let base = Date(timeIntervalSince1970: 10_000)
+        var now = base
+        let client = FakeQuotaClient(readResults: [
+            .success(snapshot(remaining: 59, updatedAt: base)),
+            .success(snapshot(remaining: 59, updatedAt: base.addingTimeInterval(75)))
+        ])
+        let store = QuotaStore(clientFactory: { client }, now: { now })
+
+        await store.refresh()
+        now = base.addingTimeInterval(75)
+        await store.refresh()
+
+        XCTAssertEqual(store.lastUpdatedDescription, "Updated 1m ago")
+    }
+
+    func testLastUpdatedResetsWhenQuotaValuesChange() async {
+        let base = Date(timeIntervalSince1970: 10_000)
+        var now = base
+        let client = FakeQuotaClient(readResults: [
+            .success(snapshot(remaining: 59, updatedAt: base)),
+            .success(snapshot(remaining: 58, updatedAt: base.addingTimeInterval(75)))
+        ])
+        let store = QuotaStore(clientFactory: { client }, now: { now })
+
+        await store.refresh()
+        now = base.addingTimeInterval(75)
+        await store.refresh()
+
+        XCTAssertEqual(store.lastUpdatedDescription, "Updated now")
+    }
+
+    func testLastUpdatedUsesNowOnlyForTheFirstMinute() async {
+        let base = Date(timeIntervalSince1970: 10_000)
+        let clientAt59Seconds = FakeQuotaClient(readResults: [
+            .success(snapshot(remaining: 59, updatedAt: base))
+        ])
+        let storeAt59Seconds = QuotaStore(
+            clientFactory: { clientAt59Seconds },
+            now: { base.addingTimeInterval(59) }
+        )
+        await storeAt59Seconds.refresh()
+        XCTAssertEqual(storeAt59Seconds.lastUpdatedDescription, "Updated now")
+
+        let clientAt60Seconds = FakeQuotaClient(readResults: [
+            .success(snapshot(remaining: 59, updatedAt: base))
+        ])
+        let storeAt60Seconds = QuotaStore(
+            clientFactory: { clientAt60Seconds },
+            now: { base.addingTimeInterval(60) }
+        )
+        await storeAt60Seconds.refresh()
+        XCTAssertEqual(storeAt60Seconds.lastUpdatedDescription, "Updated 1m ago")
+    }
+
+    func testForcedRefreshQueuesAfterAnInFlightRefresh() async throws {
+        let client = FakeQuotaClient(
+            readResults: [
+                .success(snapshot(remaining: 59)),
+                .success(snapshot(remaining: 58))
+            ],
+            readDelay: .milliseconds(100)
+        )
+        let store = QuotaStore(clientFactory: { client })
+
+        let automaticRefresh = Task { await store.refresh() }
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(store.isRefreshing)
+
+        let forcedRefresh = Task { await store.forceRefresh() }
+        await automaticRefresh.value
+        await forcedRefresh.value
+
+        XCTAssertEqual(client.readCount, 2)
+        XCTAssertEqual(store.menuBarText, "58%")
+        XCTAssertFalse(store.isRefreshing)
+    }
+
     func testRollingUpdateDebouncesIntoFreshRead() async throws {
         let client = FakeQuotaClient(readResults: [
             .success(snapshot(remaining: 75)),
@@ -47,8 +125,11 @@ final class QuotaStoreTests: XCTestCase {
 
         XCTAssertEqual(store.menuBarText, "40%")
         XCTAssertTrue(store.isSnapshotStale)
-        guard case .failed = store.connectionState else {
-            return XCTFail("Expected retained snapshot with failed state")
+        switch store.connectionState {
+        case .failed, .retrying:
+            break
+        default:
+            XCTFail("Expected retained snapshot while recovering from failure")
         }
     }
 
@@ -122,15 +203,18 @@ private final class FakeQuotaClient: CodexQuotaClienting, @unchecked Sendable {
     private let lock = NSLock()
     private var connectResults: [Result<Void, Error>]
     private var readResults: [Result<QuotaSnapshot, Error>]
+    private let readDelay: Duration?
     private var _connectCount = 0
     private var _readCount = 0
 
     init(
         connectResults: [Result<Void, Error>] = [.success(())],
-        readResults: [Result<QuotaSnapshot, Error>] = []
+        readResults: [Result<QuotaSnapshot, Error>] = [],
+        readDelay: Duration? = nil
     ) {
         self.connectResults = connectResults
         self.readResults = readResults
+        self.readDelay = readDelay
         let pair = AsyncStream<CodexQuotaEvent>.makeStream(bufferingPolicy: .unbounded)
         events = pair.stream
         continuation = pair.continuation
@@ -148,6 +232,9 @@ private final class FakeQuotaClient: CodexQuotaClienting, @unchecked Sendable {
     }
 
     func readQuota() async throws -> QuotaSnapshot {
+        if let readDelay {
+            try await Task.sleep(for: readDelay)
+        }
         let result: Result<QuotaSnapshot, Error> = lock.withLock {
             _readCount += 1
             return readResults.isEmpty

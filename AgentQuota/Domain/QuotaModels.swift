@@ -16,6 +16,72 @@ struct QuotaSnapshot: Equatable, Sendable {
     }
 }
 
+enum QuotaExhaustionForecast: Equatable, Sendable {
+    case runsOut(at: Date)
+    case lastsUntilReset
+    case exhausted
+    case unavailable
+
+    func statusDescription(relativeTo now: Date) -> String {
+        switch self {
+        case let .runsOut(at):
+            let seconds = Int(at.timeIntervalSince(now))
+            guard seconds > 0 else {
+                return "At current pace: runs out now"
+            }
+            return "At current pace: runs out \(Self.countdown(seconds: seconds))"
+        case .lastsUntilReset:
+            return "At current pace: lasts until reset"
+        case .exhausted:
+            return "Quota exhausted"
+        case .unavailable:
+            return "Run-out prediction unavailable"
+        }
+    }
+
+    func localRunOutDescription(
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String? {
+        guard case let .runsOut(at) = self else {
+            return nil
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d, HH:mm")
+        return formatter.string(from: at)
+    }
+
+    private static func countdown(seconds: Int) -> String {
+        if seconds < 60 {
+            return "in <1m"
+        }
+
+        let totalMinutes = seconds / 60
+        if totalMinutes < 60 {
+            return "in \(totalMinutes)m"
+        }
+
+        let totalHours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if totalHours < 24 {
+            return minutes == 0
+                ? "in \(totalHours)h"
+                : "in \(totalHours)h \(minutes)m"
+        }
+
+        let days = totalHours / 24
+        let hours = totalHours % 24
+        return hours == 0
+            ? "in \(days)d"
+            : "in \(days)d \(hours)h"
+    }
+}
+
 struct QuotaWindow: Equatable, Identifiable, Sendable {
     let id: String
     let usedPercent: Int
@@ -60,6 +126,49 @@ struct QuotaWindow: Equatable, Identifiable, Sendable {
             }
             return "\(durationMinutes)-minute"
         }
+    }
+
+    func exhaustionForecast(relativeTo now: Date) -> QuotaExhaustionForecast {
+        let consumedPercent = min(max(usedPercent, 0), 100)
+        if consumedPercent == 100 {
+            return .exhausted
+        }
+
+        guard
+            let durationMinutes,
+            durationMinutes > 0,
+            let resetsAt,
+            resetsAt > now
+        else {
+            return .unavailable
+        }
+
+        let duration = TimeInterval(durationMinutes) * 60
+        guard duration.isFinite, duration > 0 else {
+            return .unavailable
+        }
+
+        let windowStart = resetsAt.addingTimeInterval(-duration)
+        let elapsed = now.timeIntervalSince(windowStart)
+        guard elapsed > 0, elapsed < duration else {
+            return .unavailable
+        }
+
+        guard consumedPercent > 0 else {
+            return .lastsUntilReset
+        }
+
+        let secondsUntilExhaustion = elapsed
+            * Double(100 - consumedPercent)
+            / Double(consumedPercent)
+        guard secondsUntilExhaustion.isFinite, secondsUntilExhaustion >= 0 else {
+            return .unavailable
+        }
+
+        let predictedExhaustion = now.addingTimeInterval(secondsUntilExhaustion)
+        return predictedExhaustion < resetsAt
+            ? .runsOut(at: predictedExhaustion)
+            : .lastsUntilReset
     }
 
     func resetCountdown(relativeTo now: Date) -> String {

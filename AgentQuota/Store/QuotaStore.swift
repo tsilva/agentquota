@@ -75,6 +75,8 @@ final class QuotaStore: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var staleClockTask: Task<Void, Never>?
     private var rollingRefreshTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
+    private var quotaValuesUpdatedAt: Date?
     private var hasStarted = false
 
     init(
@@ -92,6 +94,7 @@ final class QuotaStore: ObservableObject {
         pollTask?.cancel()
         staleClockTask?.cancel()
         rollingRefreshTask?.cancel()
+        refreshTask?.cancel()
         client?.disconnect()
     }
 
@@ -107,11 +110,11 @@ final class QuotaStore: ObservableObject {
     }
 
     var lastUpdatedDescription: String {
-        guard let snapshot else {
+        guard let quotaValuesUpdatedAt else {
             return "Not updated yet"
         }
 
-        let seconds = max(Int(currentDate.timeIntervalSince(snapshot.updatedAt)), 0)
+        let seconds = max(Int(currentDate.timeIntervalSince(quotaValuesUpdatedAt)), 0)
         switch seconds {
         case 0..<60:
             return "Updated now"
@@ -153,11 +156,39 @@ final class QuotaStore: ObservableObject {
 
     func popoverOpened() {
         Task { [weak self] in
-            await self?.refresh()
+            await self?.forceRefresh()
         }
     }
 
     func refresh() async {
+        guard connectionState != .stopped else {
+            return
+        }
+
+        if let refreshTask {
+            await refreshTask.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            await performRefresh()
+            refreshTask = nil
+        }
+        refreshTask = task
+        await task.value
+    }
+
+    func forceRefresh() async {
+        if let refreshTask {
+            await refreshTask.value
+        }
+        await refresh()
+    }
+
+    private func performRefresh() async {
         guard connectionState != .stopped else {
             return
         }
@@ -193,11 +224,13 @@ final class QuotaStore: ObservableObject {
         pollTask?.cancel()
         staleClockTask?.cancel()
         rollingRefreshTask?.cancel()
+        refreshTask?.cancel()
         eventTask = nil
         reconnectTask = nil
         pollTask = nil
         staleClockTask = nil
         rollingRefreshTask = nil
+        refreshTask = nil
         client?.disconnect()
         client = nil
         connectionState = .stopped
@@ -269,7 +302,12 @@ final class QuotaStore: ObservableObject {
         isRefreshing = true
         currentDate = now()
         defer { isRefreshing = false }
-        snapshot = try await client.readQuota()
+        let newSnapshot = try await client.readQuota()
+        if snapshot?.planName != newSnapshot.planName
+            || snapshot?.windows != newSnapshot.windows {
+            quotaValuesUpdatedAt = newSnapshot.updatedAt
+        }
+        snapshot = newSnapshot
         currentDate = now()
     }
 

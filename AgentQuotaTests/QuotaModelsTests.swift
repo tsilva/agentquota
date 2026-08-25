@@ -44,6 +44,128 @@ final class QuotaModelsTests: XCTestCase {
         XCTAssertEqual(makeWindow(resetsAt: nil).localResetDescription(), "Local reset unavailable")
     }
 
+    func testForecastPredictsExhaustionBeforeReset() {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let now = start.addingTimeInterval(2 * 3_600)
+        let window = makeWindow(
+            used: 50,
+            duration: 300,
+            resetsAt: start.addingTimeInterval(5 * 3_600)
+        )
+
+        XCTAssertEqual(
+            window.exhaustionForecast(relativeTo: now),
+            .runsOut(at: start.addingTimeInterval(4 * 3_600))
+        )
+    }
+
+    func testForecastLastsWhenExhaustionIsAtOrAfterReset() {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let reset = start.addingTimeInterval(5 * 3_600)
+
+        XCTAssertEqual(
+            makeWindow(used: 50, duration: 300, resetsAt: reset)
+                .exhaustionForecast(relativeTo: start.addingTimeInterval(2.5 * 3_600)),
+            .lastsUntilReset
+        )
+        XCTAssertEqual(
+            makeWindow(used: 10, duration: 300, resetsAt: reset)
+                .exhaustionForecast(relativeTo: start.addingTimeInterval(3_600)),
+            .lastsUntilReset
+        )
+    }
+
+    func testForecastHandlesZeroExhaustedAndClampedUsage() {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let now = start.addingTimeInterval(3_600)
+        let reset = start.addingTimeInterval(5 * 3_600)
+
+        XCTAssertEqual(
+            makeWindow(used: 0, duration: 300, resetsAt: reset)
+                .exhaustionForecast(relativeTo: now),
+            .lastsUntilReset
+        )
+        XCTAssertEqual(
+            makeWindow(used: -20, duration: 300, resetsAt: reset)
+                .exhaustionForecast(relativeTo: now),
+            .lastsUntilReset
+        )
+        XCTAssertEqual(
+            makeWindow(used: 100, duration: nil, resetsAt: nil)
+                .exhaustionForecast(relativeTo: now),
+            .exhausted
+        )
+        XCTAssertEqual(
+            makeWindow(used: 140, duration: nil, resetsAt: nil)
+                .exhaustionForecast(relativeTo: now),
+            .exhausted
+        )
+    }
+
+    func testForecastIsUnavailableForInvalidWindowTiming() {
+        let now = Date(timeIntervalSince1970: 20_000)
+
+        XCTAssertEqual(
+            makeWindow(used: 20, duration: nil, resetsAt: now.addingTimeInterval(3_600))
+                .exhaustionForecast(relativeTo: now),
+            .unavailable
+        )
+        XCTAssertEqual(
+            makeWindow(used: 20, duration: 300, resetsAt: nil)
+                .exhaustionForecast(relativeTo: now),
+            .unavailable
+        )
+        XCTAssertEqual(
+            makeWindow(used: 20, duration: 0, resetsAt: now.addingTimeInterval(3_600))
+                .exhaustionForecast(relativeTo: now),
+            .unavailable
+        )
+        XCTAssertEqual(
+            makeWindow(used: 20, duration: 300, resetsAt: now)
+                .exhaustionForecast(relativeTo: now),
+            .unavailable
+        )
+        XCTAssertEqual(
+            makeWindow(used: 20, duration: 300, resetsAt: now.addingTimeInterval(6 * 3_600))
+                .exhaustionForecast(relativeTo: now),
+            .unavailable
+        )
+    }
+
+    func testForecastFormatsCountdownAndLocalRunOutTime() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let runOut = now.addingTimeInterval(2 * 3_600 + 15 * 60)
+        let forecast = QuotaExhaustionForecast.runsOut(at: runOut)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        XCTAssertEqual(
+            forecast.statusDescription(relativeTo: now),
+            "At current pace: runs out in 2h 15m"
+        )
+        XCTAssertEqual(
+            forecast.localRunOutDescription(
+                calendar: calendar,
+                locale: Locale(identifier: "en_GB"),
+                timeZone: calendar.timeZone
+            ),
+            "Thu 1 Jan at 05:01"
+        )
+        XCTAssertEqual(
+            QuotaExhaustionForecast.lastsUntilReset.statusDescription(relativeTo: now),
+            "At current pace: lasts until reset"
+        )
+        XCTAssertEqual(
+            QuotaExhaustionForecast.exhausted.statusDescription(relativeTo: now),
+            "Quota exhausted"
+        )
+        XCTAssertEqual(
+            QuotaExhaustionForecast.unavailable.statusDescription(relativeTo: now),
+            "Run-out prediction unavailable"
+        )
+        XCTAssertNil(QuotaExhaustionForecast.lastsUntilReset.localRunOutDescription())
+    }
+
     func testUnknownPlanTypesRemainDisplayable() {
         XCTAssertEqual("pro".quotaPlanDisplayName, "Pro")
         XCTAssertEqual("future_ultra_plan".quotaPlanDisplayName, "Future Ultra Plan")
