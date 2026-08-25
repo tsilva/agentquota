@@ -1,0 +1,19 @@
+# Xcode build output
+build/
+DerivedData/
+.build/
+*.app
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+*.xcresult
+*.xccovarchive
+*.xccovreport
+*.profraw
+
+# Per-user Xcode state
+xcuserdata/
+*.xcuserstate
+
+# Local macOS metadata
+.DS_Store
