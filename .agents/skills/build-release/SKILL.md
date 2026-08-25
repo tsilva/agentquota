@@ -54,9 +54,15 @@ For validation without a GitHub mutation:
 The script owns the release sequence: repository and GitHub preflight,
 automatic version selection, tests, isolated Release build, version injection,
 signature and bundle validation, compressed read-only DMG creation and mounted
-content validation, SHA-256 creation, and `gh release create`. The DMG contains
-`AgentQuota.app` and an Applications shortcut. Do not duplicate those steps
+content validation, SHA-256 creation, and `gh release create`. The DMG opens as
+a compact branded drag-to-install window with large `AgentQuota.app` and
+Applications icons, a directional background, and persisted Finder layout
+metadata generated without Finder automation. Do not duplicate those steps
 manually or change project version files for a release.
+
+Upload release assets without GitHub display labels so the Assets list shows
+their complete filenames, including the version, platform, architecture, and
+checksum suffix.
 
 If any preflight, test, build, validation, upload, or publication step fails,
 stop and report the exact failure. Do not delete or replace tags/releases, force
