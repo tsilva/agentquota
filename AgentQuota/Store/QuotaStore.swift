@@ -186,6 +186,13 @@ final class QuotaStore: ObservableObject {
             await refreshTask.value
         }
         await refresh()
+
+        guard connectionState.isConnected else {
+            return
+        }
+        let refreshedAt = now()
+        quotaValuesUpdatedAt = refreshedAt
+        currentDate = refreshedAt
     }
 
     private func performRefresh() async {
