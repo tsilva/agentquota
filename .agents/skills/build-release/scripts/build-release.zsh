@@ -35,7 +35,7 @@ if [[ $# -ne 0 ]]; then
     fail "Version arguments are not accepted; versioning is automatic"
 fi
 
-for command_name in awk codesign ditto gh git grep head lipo plutil shasum unzip xcodebuild; do
+for command_name in awk codesign ditto gh git grep hdiutil head lipo plutil readlink shasum xcodebuild; do
     require_command "$command_name"
 done
 
@@ -143,7 +143,12 @@ if gh release view "$release_tag" --repo "$repository_slug" >/dev/null 2>&1; the
 fi
 
 release_workspace="$(mktemp -d "${TMPDIR:-/tmp}/agentquota-release.XXXXXX")"
+typeset -i dmg_attached=0
+validation_mountpoint=""
 cleanup() {
+    if [[ $dmg_attached -eq 1 && -n "$validation_mountpoint" ]]; then
+        hdiutil detach "$validation_mountpoint" >/dev/null 2>&1 || true
+    fi
     if [[ -n "${release_workspace:-}" && -d "$release_workspace" ]]; then
         rm -rf -- "$release_workspace"
     fi
@@ -152,7 +157,9 @@ trap cleanup EXIT
 
 derived_data_path="${release_workspace}/DerivedData"
 output_directory="${release_workspace}/output"
-mkdir -p "$output_directory"
+dmg_source_directory="${release_workspace}/dmg-root"
+validation_mountpoint="${release_workspace}/dmg-validation"
+mkdir -p "$output_directory" "$dmg_source_directory" "$validation_mountpoint"
 
 print "Testing AgentQuota at ${head_sha}"
 xcodebuild test \
@@ -193,12 +200,42 @@ binary_architectures="$(lipo -archs "$binary_path")"
 [[ "$is_menu_bar_app" == "true" ]] || fail "LSUIElement is not enabled"
 [[ "$binary_architectures" == "arm64" ]] || fail "Expected arm64 binary, found: ${binary_architectures}"
 
-artifact_name="AgentQuota-${release_version}-macOS-arm64.zip"
+artifact_name="AgentQuota-${release_version}-macOS-arm64.dmg"
 artifact_path="${output_directory}/${artifact_name}"
 checksum_path="${artifact_path}.sha256"
 
-ditto -c -k --sequesterRsrc --keepParent "$app_path" "$artifact_path"
-unzip -t "$artifact_path" >/dev/null
+ditto "$app_path" "${dmg_source_directory}/AgentQuota.app"
+ln -s /Applications "${dmg_source_directory}/Applications"
+hdiutil create \
+    -volname "AgentQuota ${release_version}" \
+    -srcfolder "$dmg_source_directory" \
+    -format UDZO \
+    -ov \
+    "$artifact_path" >/dev/null
+hdiutil verify "$artifact_path" >/dev/null
+hdiutil attach \
+    "$artifact_path" \
+    -readonly \
+    -nobrowse \
+    -noautoopen \
+    -mountpoint "$validation_mountpoint" >/dev/null
+dmg_attached=1
+
+packaged_app_path="${validation_mountpoint}/AgentQuota.app"
+packaged_info_plist="${packaged_app_path}/Contents/Info.plist"
+packaged_binary_path="${packaged_app_path}/Contents/MacOS/AgentQuota"
+[[ -d "$packaged_app_path" ]] || fail "DMG does not contain AgentQuota.app"
+[[ -L "${validation_mountpoint}/Applications" ]] || fail "DMG does not contain an Applications shortcut"
+[[ "$(readlink "${validation_mountpoint}/Applications")" == "/Applications" ]] \
+    || fail "DMG Applications shortcut has an unexpected target"
+codesign --verify --deep --strict --verbose=2 "$packaged_app_path"
+[[ "$(plutil -extract CFBundleShortVersionString raw -o - "$packaged_info_plist")" == "$release_version" ]] \
+    || fail "DMG contains an unexpected app version"
+[[ "$(lipo -archs "$packaged_binary_path")" == "arm64" ]] \
+    || fail "DMG contains an app with an unexpected architecture"
+
+hdiutil detach "$validation_mountpoint" >/dev/null
+dmg_attached=0
 (
     cd "$output_directory"
     shasum -a 256 "$artifact_name" > "${artifact_name}.sha256"
@@ -211,11 +248,11 @@ if [[ $dry_run -eq 1 ]]; then
     exit 0
 fi
 
-release_notice=$'Developer build for Apple silicon Macs running macOS 26. This app is ad-hoc signed and not notarized, so macOS may require opening it via right-click > Open or allowing it in System Settings > Privacy & Security.\n\nInstall the Codex CLI and run `codex login` before launching AgentQuota.'
+release_notice=$'Developer build for Apple silicon Macs running macOS 26. Open the DMG and drag AgentQuota to Applications. This app is ad-hoc signed and not notarized, so macOS may require opening it via right-click > Open or allowing it in System Settings > Privacy & Security.\n\nInstall the Codex CLI and run `codex login` before launching AgentQuota.'
 
 print "Publishing ${release_tag} to ${repository_slug}"
 gh release create "$release_tag" \
-    "$artifact_path#AgentQuota ${release_version} for macOS arm64" \
+    "$artifact_path#AgentQuota ${release_version} DMG for macOS arm64" \
     "$checksum_path#SHA-256 checksum" \
     --repo "$repository_slug" \
     --target "$head_sha" \
