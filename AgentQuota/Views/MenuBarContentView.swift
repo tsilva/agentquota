@@ -48,7 +48,7 @@ struct MenuBarContentView: View {
 
             Menu {
                 Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await store.refresh() }
+                    Task { await store.forceRefresh() }
                 }
                 Divider()
                 Button("About AgentQuota", systemImage: "info.circle") {
@@ -138,15 +138,18 @@ struct MenuBarContentView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    Task { await store.refresh() }
+                    Task { await store.forceRefresh() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .rotationEffect(store.isRefreshing ? .degrees(45) : .zero)
+                        .symbolEffect(
+                            .rotate.clockwise,
+                            options: .repeat(.continuous),
+                            isActive: store.isRefreshing
+                        )
                 }
                 .buttonStyle(.borderless)
-                .disabled(store.isRefreshing)
-                .help("Refresh quota")
-                .accessibilityLabel("Refresh quota")
+                .help(store.isRefreshing ? "Refreshing quota" : "Force refresh quota")
+                .accessibilityLabel(store.isRefreshing ? "Refreshing quota" : "Refresh quota")
 
                 Text(store.lastUpdatedDescription)
                     .foregroundStyle(.secondary)
@@ -229,6 +232,36 @@ private struct QuotaWindowView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .monospacedDigit()
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(forecast.statusDescription(relativeTo: now))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                if let localRunOutDescription = forecast.localRunOutDescription() {
+                    Text(localRunOutDescription)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(forecastColor)
+            .monospacedDigit()
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var forecast: QuotaExhaustionForecast {
+        window.exhaustionForecast(relativeTo: now)
+    }
+
+    private var forecastColor: Color {
+        switch forecast {
+        case .runsOut:
+            return .orange
+        case .exhausted:
+            return .red
+        case .lastsUntilReset, .unavailable:
+            return .secondary
         }
     }
 
