@@ -35,12 +35,16 @@ if [[ $# -ne 0 ]]; then
     fail "Version arguments are not accepted; versioning is automatic"
 fi
 
-for command_name in awk codesign ditto gh git grep hdiutil head lipo plutil readlink shasum xcodebuild; do
+for command_name in awk cmp codesign ditto gh git grep hdiutil head lipo plutil readlink shasum sips xcodebuild xcrun; do
     require_command "$command_name"
 done
 
 script_directory="${0:A:h}"
 repository_root="$(git -C "$script_directory" rev-parse --show-toplevel)"
+background_renderer="${script_directory}/render-dmg-background.swift"
+layout_template="${script_directory:h}/assets/dmg-layout.DS_Store"
+[[ -f "$background_renderer" ]] || fail "DMG background renderer not found: ${background_renderer}"
+[[ -f "$layout_template" ]] || fail "DMG Finder layout template not found: ${layout_template}"
 cd "$repository_root"
 
 [[ "$(git branch --show-current)" == "main" ]] || fail "Releases must be built from main"
@@ -159,7 +163,7 @@ derived_data_path="${release_workspace}/DerivedData"
 output_directory="${release_workspace}/output"
 dmg_source_directory="${release_workspace}/dmg-root"
 validation_mountpoint="${release_workspace}/dmg-validation"
-mkdir -p "$output_directory" "$dmg_source_directory" "$validation_mountpoint"
+mkdir -p "$output_directory" "$dmg_source_directory/.background" "$validation_mountpoint"
 
 print "Testing AgentQuota at ${head_sha}"
 xcodebuild test \
@@ -203,11 +207,20 @@ binary_architectures="$(lipo -archs "$binary_path")"
 artifact_name="AgentQuota-${release_version}-macOS-arm64.dmg"
 artifact_path="${output_directory}/${artifact_name}"
 checksum_path="${artifact_path}.sha256"
+background_path="${dmg_source_directory}/.background/installer-background.png"
+volume_name="AgentQuota Installer"
 
 ditto "$app_path" "${dmg_source_directory}/AgentQuota.app"
 ln -s /Applications "${dmg_source_directory}/Applications"
+ditto "$layout_template" "${dmg_source_directory}/.DS_Store"
+xcrun swift "$background_renderer" "$background_path" "$release_version"
+background_width="$(sips -g pixelWidth "$background_path" | awk '/pixelWidth:/ { print $2 }')"
+background_height="$(sips -g pixelHeight "$background_path" | awk '/pixelHeight:/ { print $2 }')"
+[[ "$background_width" == "700" && "$background_height" == "440" ]] \
+    || fail "Unexpected DMG background dimensions: ${background_width}x${background_height}"
+
 hdiutil create \
-    -volname "AgentQuota ${release_version}" \
+    -volname "$volume_name" \
     -srcfolder "$dmg_source_directory" \
     -format UDZO \
     -ov \
@@ -226,6 +239,11 @@ packaged_info_plist="${packaged_app_path}/Contents/Info.plist"
 packaged_binary_path="${packaged_app_path}/Contents/MacOS/AgentQuota"
 [[ -d "$packaged_app_path" ]] || fail "DMG does not contain AgentQuota.app"
 [[ -L "${validation_mountpoint}/Applications" ]] || fail "DMG does not contain an Applications shortcut"
+[[ -f "${validation_mountpoint}/.background/installer-background.png" ]] \
+    || fail "DMG does not contain its Finder background"
+[[ -f "${validation_mountpoint}/.DS_Store" ]] || fail "DMG does not contain its Finder layout metadata"
+cmp -s "$layout_template" "${validation_mountpoint}/.DS_Store" \
+    || fail "DMG Finder layout metadata differs from the validated template"
 [[ "$(readlink "${validation_mountpoint}/Applications")" == "/Applications" ]] \
     || fail "DMG Applications shortcut has an unexpected target"
 codesign --verify --deep --strict --verbose=2 "$packaged_app_path"
@@ -252,8 +270,8 @@ release_notice=$'Developer build for Apple silicon Macs running macOS 26. Open t
 
 print "Publishing ${release_tag} to ${repository_slug}"
 gh release create "$release_tag" \
-    "$artifact_path#AgentQuota ${release_version} DMG for macOS arm64" \
-    "$checksum_path#SHA-256 checksum" \
+    "$artifact_path" \
+    "$checksum_path" \
     --repo "$repository_slug" \
     --target "$head_sha" \
     --title "AgentQuota ${release_version}" \
