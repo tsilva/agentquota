@@ -53,9 +53,10 @@ For validation without a GitHub mutation:
 
 The script owns the release sequence: repository and GitHub preflight,
 automatic version selection, tests, isolated Release build, version injection,
-signature and bundle validation, ZIP and SHA-256 creation, and
-`gh release create`. Do not duplicate those steps manually or change project
-version files for a release.
+signature and bundle validation, compressed read-only DMG creation and mounted
+content validation, SHA-256 creation, and `gh release create`. The DMG contains
+`AgentQuota.app` and an Applications shortcut. Do not duplicate those steps
+manually or change project version files for a release.
 
 If any preflight, test, build, validation, upload, or publication step fails,
 stop and report the exact failure. Do not delete or replace tags/releases, force
