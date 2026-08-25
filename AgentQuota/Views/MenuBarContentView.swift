@@ -1,24 +1,6 @@
 import AppKit
 import SwiftUI
 
-struct MenuBarLabel: View {
-    @ObservedObject var store: QuotaStore
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "terminal.fill")
-            Text(store.menuBarText)
-                .monospacedDigit()
-            if store.isSnapshotStale {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .accessibilityLabel("Cached quota is stale")
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Codex quota, \(store.menuBarText) remaining")
-    }
-}
-
 struct MenuBarContentView: View {
     @ObservedObject var store: QuotaStore
 

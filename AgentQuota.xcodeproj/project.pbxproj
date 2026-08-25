@@ -22,6 +22,7 @@
 		B20000000000000000000014 /* CodexQuotaClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* CodexQuotaClientTests.swift */; };
 		B20000000000000000000015 /* QuotaStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* QuotaStoreTests.swift */; };
 		B20000000000000000000016 /* AppServerTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* AppServerTransportTests.swift */; };
+		B20000000000000000000017 /* AgentQuotaAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* AgentQuotaAppTests.swift */; };
 		B20000000000000000000020 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
@@ -54,6 +55,7 @@
 		B10000000000000000000014 /* CodexQuotaClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexQuotaClientTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000015 /* QuotaStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaStoreTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000016 /* AppServerTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServerTransportTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* AgentQuotaAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentQuotaAppTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000020 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		B10000000000000000000021 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		B10000000000000000000022 /* PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PLAN.md; sourceTree = "<group>"; };
@@ -168,6 +170,7 @@
 				B10000000000000000000014 /* CodexQuotaClientTests.swift */,
 				B10000000000000000000015 /* QuotaStoreTests.swift */,
 				B10000000000000000000016 /* AppServerTransportTests.swift */,
+				B10000000000000000000017 /* AgentQuotaAppTests.swift */,
 			);
 			path = AgentQuotaTests;
 			sourceTree = "<group>";
@@ -326,6 +329,7 @@
 				B20000000000000000000014 /* CodexQuotaClientTests.swift in Sources */,
 				B20000000000000000000015 /* QuotaStoreTests.swift in Sources */,
 				B20000000000000000000016 /* AppServerTransportTests.swift in Sources */,
+				B20000000000000000000017 /* AgentQuotaAppTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
