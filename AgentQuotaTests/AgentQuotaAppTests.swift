@@ -19,7 +19,10 @@ final class AgentQuotaAppTests: XCTestCase {
             ) as? Int,
             0
         )
-        XCTAssertEqual(button.title, "—")
+        XCTAssertEqual(button.title, "")
+        XCTAssertEqual(button.imageScaling, .scaleNone)
+        XCTAssertEqual(button.image?.size, MenuBarQuotaMeter.size)
+        XCTAssertFalse(try XCTUnwrap(button.image).isTemplate)
         XCTAssertGreaterThan(button.frame.height, 0)
 
         let clock = ContinuousClock()
@@ -30,5 +33,17 @@ final class AgentQuotaAppTests: XCTestCase {
 
         XCTAssertTrue(button.window?.isVisible == true)
         XCTAssertGreaterThan(button.window?.frame.height ?? 0, 0)
+    }
+
+    func testMenuBarQuotaMeterKeepsAFixedFootprint() {
+        let loading = MenuBarQuotaMeter.image(remainingPercent: nil, isStale: false)
+        let partial = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: false)
+        let full = MenuBarQuotaMeter.image(remainingPercent: 100, isStale: false)
+        let stale = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: true)
+
+        XCTAssertEqual(loading.size, MenuBarQuotaMeter.size)
+        XCTAssertEqual(partial.size, MenuBarQuotaMeter.size)
+        XCTAssertEqual(full.size, MenuBarQuotaMeter.size)
+        XCTAssertEqual(stale.size, MenuBarQuotaMeter.size)
     }
 }
