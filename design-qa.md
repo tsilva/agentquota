@@ -59,6 +59,66 @@ final result: passed
 
 ---
 
+# Borderless Menu-Bar Meter Design QA
+
+## Comparison Target
+
+- Source visual truth: `docs/reference/agentquota-menu-meter-borderless-concept.png`
+- Source focused crop: `docs/qa/agentquota-menu-meter-borderless-source-crop.png`
+- Rendered implementation: `docs/qa/agentquota-menu-meter-borderless-implementation.png`
+- Combined comparison: `docs/qa/agentquota-menu-meter-borderless-comparison.png`
+- Viewport: native AppKit status-item image at 44 × 19 points in dark appearance.
+- State: fresh quota snapshot at 88% remaining, matching the selected mock.
+- Source dimensions: 1914 × 822 pixels. The selected meter was cropped to 90 × 40 pixels and normalized to 342 × 152 pixels.
+- Implementation dimensions: 352 × 152 pixels, rendered directly from the production `MenuBarQuotaMeter` drawing code at 8× its 44 × 19-point footprint.
+- CSS size / device scale factor: not applicable to this native AppKit component. The focused comparison normalizes both artifacts to 152 pixels high while preserving their aspect ratios.
+
+## Findings
+
+No actionable P0, P1, or P2 differences were found in the first comparison pass.
+
+The implementation matches the selected borderless structure: native terminal text and percentage on one baseline, no enclosing shape or background, and a single quiet proportional progress line below. The component retains a fixed footprint while the percentage and fill change.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: native 9-point monospaced system and monospaced-digit fonts match the mock's compact developer-tool character, maintain percentage alignment, and render without clipping.
+- Spacing and layout rhythm: the 44 × 19-point footprint aligns with neighboring menu-bar symbols. A 1.5-point prompt/value gap and two-point progress inset keep the item compact without crowding.
+- Colors and visual tokens: semantic macOS label color keeps text native across appearances. The muted label-color track and system-blue 88% fill reproduce the reference hierarchy; stale data switches both text and fill to semantic orange.
+- Image quality and asset fidelity: the component is resolution-independent native AppKit UI. There are no raster assets, decorative marks, logos, or substitute imagery in the selected meter; the terminal prompt is literal UI content.
+- Copy and content: the compared state exactly shows `>_ 88%`. Loading remains `>_ —`, and stale data retains the existing warning semantics without changing layout.
+
+## Full-View Comparison Evidence
+
+`docs/qa/agentquota-menu-meter-borderless-comparison.png` places the selected focused mock and production render together at the same height. It verifies the borderless silhouette, terminal/value hierarchy, component density, underline placement, and proportional blue fill.
+
+## Focused Region Evidence
+
+The menu-bar meter is itself the focused region and fills the comparison image. Its type weight, baseline, prompt/value spacing, underline thickness, track contrast, and 88% state are readable at the saved 8× scale, so no additional crop is needed.
+
+## Comparison History
+
+1. First-pass evidence in `docs/qa/agentquota-menu-meter-borderless-comparison.png` found no actionable P0/P1/P2 mismatch. No visual correction loop was required.
+
+## Open Questions
+
+None.
+
+## Implementation Checklist
+
+- [x] Remove the enclosing rectangle and filled background.
+- [x] Keep `>_` and the percentage on one compact baseline.
+- [x] Add a thin full-width track with proportional blue progress.
+- [x] Preserve a fixed footprint through `100%`, loading, and stale states.
+- [x] Preserve tooltip and accessibility descriptions.
+
+## Follow-up Polish
+
+No remaining P3 visual refinements were identified in the focused component comparison.
+
+final result: passed
+
+---
+
 # Compact Menu-Bar Meter Design QA
 
 ## Comparison Target
