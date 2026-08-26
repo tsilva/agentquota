@@ -56,3 +56,66 @@ None. The source's predictive exhaustion copy is treated as illustrative rather 
 - P3 residual test gap: the menu-bar label itself could not be captured while macOS was locked. Its implementation uses the planned terminal symbol, tightest remaining percentage, em dash loading state, and stale warning; the popover component is the visually compared target.
 
 final result: passed
+
+---
+
+# Compact Menu-Bar Meter Design QA
+
+## Comparison Target
+
+- Source visual truth: `docs/reference/agentquota-menu-meter-concept.png`
+- Source focused crop: `docs/qa/agentquota-menu-meter-source-crop.png`
+- Rendered implementation: `docs/qa/agentquota-menu-meter-implementation.png`
+- Combined comparison: `docs/qa/agentquota-menu-meter-comparison.png`
+- Viewport: native AppKit status-item image at 48 × 19 points in dark appearance.
+- State: fresh quota snapshot at 100% remaining, matching the selected mock.
+- Source dimensions: 1536 × 1024 pixels. The meter was cropped to 240 × 98 pixels and normalized to 372 × 152 pixels.
+- Implementation dimensions: 384 × 152 pixels, rendered directly from the production `MenuBarQuotaMeter` drawing code at 8× its 48 × 19-point footprint.
+- CSS size / device scale factor: not applicable to this native AppKit component. The focused comparison normalizes both artifacts to 152 pixels high while preserving their aspect ratios.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+The production meter preserves the selected compact proportions, terminal prompt inside the fill, fixed-width `100%` slot, battery-weight outline, inset dark gap, sharper corners, and full blue track at 100%. At lower values, only the blue fill width changes; the component and text positions remain stable.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: native monospaced system and monospaced-digit fonts preserve the CLI character and prevent percentage-width jitter. The 9-point semibold/medium treatment remains readable without clipping.
+- Spacing and layout rhythm: the 48 × 19-point frame matches the mock's compact aspect ratio. The 1.3-point border and 2.5-point track inset reproduce the battery-like border and inner margin, while the fixed text slot keeps `100%` inside the track.
+- Colors and visual tokens: the meter uses semantic macOS label white, system blue, and orange for stale data, retaining contrast across system appearances.
+- Image quality and asset fidelity: the implementation is resolution-independent AppKit drawing, so the border, fill, clipping, and typography remain sharp at native backing scales. The CLI mark is rendered as native monospaced text because it is the meter's literal content rather than a decorative image asset.
+- Copy and content: the focused state exactly shows `>_ 100%`. Loading uses an em dash and stale data uses the existing warning semantics without changing the meter footprint.
+
+## Full-View Comparison Evidence
+
+`docs/qa/agentquota-menu-meter-comparison.png` places the selected meter crop and the production render together at the same visual height. It verifies overall width-to-height ratio, outline weight, corner sharpness, blue fill, internal gap, and text placement.
+
+## Focused Region Evidence
+
+The meter itself is the focused region and fills the comparison image, so no additional crop is needed. Border, inset, glyph spacing, percentage alignment, and corner geometry are all readable at 8× scale.
+
+## Comparison History
+
+1. The first production render exposed a P2 compactness mismatch: a 60 × 19-point frame and 10.5/11-point text made the meter wider and more crowded than the selected mock.
+2. The implementation was tightened to 48 × 19 points, text was reduced to 9 points, prompt spacing to 1.5 points, and the outer radius to 2 points.
+3. Post-fix evidence in `docs/qa/agentquota-menu-meter-comparison.png` shows the corrected compact ratio, sharper corners, balanced internal spacing, and battery-weight border. No actionable P0/P1/P2 difference remains.
+
+## Open Questions
+
+None.
+
+## Implementation Checklist
+
+- [x] Keep the CLI prompt inside the progress meter.
+- [x] Size the frame only for the prompt plus `100%`.
+- [x] Match the selected sharper corner treatment.
+- [x] Match the battery-like outline and inner margin.
+- [x] Keep width and text alignment stable from loading through 100%.
+- [x] Preserve stale-state warning and accessibility descriptions.
+
+## Follow-up Polish
+
+No remaining P3 visual refinements were identified in the focused component comparison.
+
+final result: passed

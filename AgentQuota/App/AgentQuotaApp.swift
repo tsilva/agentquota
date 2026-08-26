@@ -3,6 +3,108 @@ import Combine
 import SwiftUI
 
 @MainActor
+enum MenuBarQuotaMeter {
+    static let size = NSSize(width: 48, height: 19)
+
+    private static let borderWidth: CGFloat = 1.3
+    private static let trackInset: CGFloat = 2.5
+    private static let outerCornerRadius: CGFloat = 2
+    private static let innerCornerRadius: CGFloat = 1.5
+    private static let promptValueSpacing: CGFloat = 1.5
+
+    static func image(remainingPercent: Int?, isStale: Bool) -> NSImage {
+        let percent = min(max(remainingPercent ?? 0, 0), 100)
+        let value = remainingPercent.map { "\($0)%" } ?? "—"
+        let image = NSImage(size: size, flipped: false) { _ in
+            draw(percent: percent, value: value, isStale: isStale)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    private static func draw(percent: Int, value: String, isStale: Bool) {
+        NSGraphicsContext.current?.shouldAntialias = true
+
+        let outerRect = NSRect(origin: .zero, size: size).insetBy(
+            dx: borderWidth / 2,
+            dy: borderWidth / 2
+        )
+        let outerPath = NSBezierPath(
+            roundedRect: outerRect,
+            xRadius: outerCornerRadius,
+            yRadius: outerCornerRadius
+        )
+        outerPath.lineWidth = borderWidth
+        (isStale ? NSColor.systemOrange : NSColor.labelColor).setStroke()
+        outerPath.stroke()
+
+        let trackRect = outerRect.insetBy(dx: trackInset, dy: trackInset)
+        let trackPath = NSBezierPath(
+            roundedRect: trackRect,
+            xRadius: innerCornerRadius,
+            yRadius: innerCornerRadius
+        )
+        NSColor.black.withAlphaComponent(0.48).setFill()
+        trackPath.fill()
+
+        if percent > 0 {
+            NSGraphicsContext.saveGraphicsState()
+            trackPath.addClip()
+            let fillRect = NSRect(
+                x: trackRect.minX,
+                y: trackRect.minY,
+                width: trackRect.width * CGFloat(percent) / 100,
+                height: trackRect.height
+            )
+            (isStale ? NSColor.systemOrange : NSColor.systemBlue).setFill()
+            fillRect.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        drawContent(value: value, isStale: isStale)
+    }
+
+    private static func drawContent(value: String, isStale: Bool) {
+        let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
+        let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+        let textColor = NSColor.white
+        let prompt = isStale ? "!" : ">_"
+
+        let promptAttributes: [NSAttributedString.Key: Any] = [
+            .font: promptFont,
+            .foregroundColor: textColor,
+        ]
+        let valueAttributes: [NSAttributedString.Key: Any] = [
+            .font: valueFont,
+            .foregroundColor: textColor,
+        ]
+        let promptSize = (">_" as NSString).size(withAttributes: promptAttributes)
+        let maximumValueSize = ("100%" as NSString).size(withAttributes: valueAttributes)
+        let valueSize = (value as NSString).size(withAttributes: valueAttributes)
+        let contentWidth = promptSize.width + promptValueSpacing + maximumValueSize.width
+        let contentX = floor((size.width - contentWidth) / 2)
+
+        let promptRect = NSRect(
+            x: contentX,
+            y: floor((size.height - promptSize.height) / 2),
+            width: promptSize.width,
+            height: promptSize.height
+        )
+        (prompt as NSString).draw(in: promptRect, withAttributes: promptAttributes)
+
+        let valueRect = NSRect(
+            x: contentX + promptSize.width + promptValueSpacing
+                + maximumValueSize.width - valueSize.width,
+            y: floor((size.height - valueSize.height) / 2),
+            width: valueSize.width,
+            height: valueSize.height
+        )
+        (value as NSString).draw(in: valueRect, withAttributes: valueAttributes)
+    }
+}
+
+@MainActor
 final class AgentQuotaRuntime {
     static let shared = AgentQuotaRuntime()
 
@@ -74,11 +176,8 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp])
-        button.imagePosition = .imageLeading
-        button.font = .monospacedDigitSystemFont(
-            ofSize: NSFont.systemFontSize,
-            weight: .regular
-        )
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleNone
         statusItem = item
         updateStatusItem()
     }
@@ -117,11 +216,11 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
         }
 
         let isStale = store.isSnapshotStale
-        let symbolName = isStale ? "exclamationmark.triangle.fill" : "terminal.fill"
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        image?.isTemplate = true
-        button.image = image
-        button.title = store.menuBarText
+        button.image = MenuBarQuotaMeter.image(
+            remainingPercent: store.snapshot?.lowestRemainingPercent,
+            isStale: isStale
+        )
+        button.title = ""
         button.toolTip = isStale
             ? "Codex quota is stale: \(store.menuBarText) remaining"
             : "Codex quota: \(store.menuBarText) remaining"
