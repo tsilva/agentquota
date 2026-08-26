@@ -4,13 +4,13 @@ import SwiftUI
 
 @MainActor
 enum MenuBarQuotaMeter {
-    static let size = NSSize(width: 48, height: 19)
+    static let size = NSSize(width: 44, height: 19)
 
-    private static let borderWidth: CGFloat = 1.3
-    private static let trackInset: CGFloat = 2.5
-    private static let outerCornerRadius: CGFloat = 2
-    private static let innerCornerRadius: CGFloat = 1.5
     private static let promptValueSpacing: CGFloat = 1.5
+    private static let progressInset: CGFloat = 2
+    private static let progressY: CGFloat = 1.25
+    private static let trackWidth: CGFloat = 1
+    private static let fillWidth: CGFloat = 1.5
 
     static func image(remainingPercent: Int?, isStale: Bool) -> NSImage {
         let percent = min(max(remainingPercent ?? 0, 0), 100)
@@ -25,50 +25,40 @@ enum MenuBarQuotaMeter {
 
     private static func draw(percent: Int, value: String, isStale: Bool) {
         NSGraphicsContext.current?.shouldAntialias = true
+        drawProgress(percent: percent, isStale: isStale)
+        drawContent(value: value, isStale: isStale)
+    }
 
-        let outerRect = NSRect(origin: .zero, size: size).insetBy(
-            dx: borderWidth / 2,
-            dy: borderWidth / 2
-        )
-        let outerPath = NSBezierPath(
-            roundedRect: outerRect,
-            xRadius: outerCornerRadius,
-            yRadius: outerCornerRadius
-        )
-        outerPath.lineWidth = borderWidth
-        (isStale ? NSColor.systemOrange : NSColor.labelColor).setStroke()
-        outerPath.stroke()
+    private static func drawProgress(percent: Int, isStale: Bool) {
+        let startX = progressInset
+        let endX = size.width - progressInset
 
-        let trackRect = outerRect.insetBy(dx: trackInset, dy: trackInset)
-        let trackPath = NSBezierPath(
-            roundedRect: trackRect,
-            xRadius: innerCornerRadius,
-            yRadius: innerCornerRadius
-        )
-        NSColor.black.withAlphaComponent(0.48).setFill()
-        trackPath.fill()
+        let trackPath = NSBezierPath()
+        trackPath.move(to: NSPoint(x: startX, y: progressY))
+        trackPath.line(to: NSPoint(x: endX, y: progressY))
+        trackPath.lineWidth = trackWidth
+        trackPath.lineCapStyle = .round
+        NSColor.labelColor.withAlphaComponent(0.24).setStroke()
+        trackPath.stroke()
 
-        if percent > 0 {
-            NSGraphicsContext.saveGraphicsState()
-            trackPath.addClip()
-            let fillRect = NSRect(
-                x: trackRect.minX,
-                y: trackRect.minY,
-                width: trackRect.width * CGFloat(percent) / 100,
-                height: trackRect.height
-            )
-            (isStale ? NSColor.systemOrange : NSColor.systemBlue).setFill()
-            fillRect.fill()
-            NSGraphicsContext.restoreGraphicsState()
+        guard percent > 0 else {
+            return
         }
 
-        drawContent(value: value, isStale: isStale)
+        let fillPath = NSBezierPath()
+        let fillEndX = startX + (endX - startX) * CGFloat(percent) / 100
+        fillPath.move(to: NSPoint(x: startX, y: progressY))
+        fillPath.line(to: NSPoint(x: fillEndX, y: progressY))
+        fillPath.lineWidth = fillWidth
+        fillPath.lineCapStyle = .round
+        (isStale ? NSColor.systemOrange : NSColor.systemBlue).setStroke()
+        fillPath.stroke()
     }
 
     private static func drawContent(value: String, isStale: Bool) {
         let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
         let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-        let textColor = NSColor.white
+        let textColor = isStale ? NSColor.systemOrange : NSColor.labelColor
         let prompt = isStale ? "!" : ">_"
 
         let promptAttributes: [NSAttributedString.Key: Any] = [
@@ -79,24 +69,25 @@ enum MenuBarQuotaMeter {
             .font: valueFont,
             .foregroundColor: textColor,
         ]
-        let promptSize = (">_" as NSString).size(withAttributes: promptAttributes)
+        let promptSlotSize = (">_" as NSString).size(withAttributes: promptAttributes)
+        let promptSize = (prompt as NSString).size(withAttributes: promptAttributes)
         let maximumValueSize = ("100%" as NSString).size(withAttributes: valueAttributes)
         let valueSize = (value as NSString).size(withAttributes: valueAttributes)
-        let contentWidth = promptSize.width + promptValueSpacing + maximumValueSize.width
+        let contentWidth = promptSlotSize.width + promptValueSpacing + maximumValueSize.width
         let contentX = floor((size.width - contentWidth) / 2)
 
         let promptRect = NSRect(
-            x: contentX,
-            y: floor((size.height - promptSize.height) / 2),
+            x: contentX + (promptSlotSize.width - promptSize.width) / 2,
+            y: floor((size.height - promptSize.height) / 2) + 1,
             width: promptSize.width,
             height: promptSize.height
         )
         (prompt as NSString).draw(in: promptRect, withAttributes: promptAttributes)
 
         let valueRect = NSRect(
-            x: contentX + promptSize.width + promptValueSpacing
+            x: contentX + promptSlotSize.width + promptValueSpacing
                 + maximumValueSize.width - valueSize.width,
-            y: floor((size.height - valueSize.height) / 2),
+            y: floor((size.height - valueSize.height) / 2) + 1,
             width: valueSize.width,
             height: valueSize.height
         )

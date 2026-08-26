@@ -41,6 +41,7 @@ final class AgentQuotaAppTests: XCTestCase {
         let full = MenuBarQuotaMeter.image(remainingPercent: 100, isStale: false)
         let stale = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: true)
 
+        XCTAssertEqual(MenuBarQuotaMeter.size, NSSize(width: 44, height: 19))
         XCTAssertEqual(loading.size, MenuBarQuotaMeter.size)
         XCTAssertEqual(partial.size, MenuBarQuotaMeter.size)
         XCTAssertEqual(full.size, MenuBarQuotaMeter.size)
