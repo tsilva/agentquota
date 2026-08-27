@@ -11,14 +11,40 @@ enum MenuBarQuotaMeter {
     private static let progressY: CGFloat = 1.25
     private static let trackWidth: CGFloat = 1
     private static let fillWidth: CGFloat = 1.5
+    private static let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
+    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
 
     static func image(remainingPercent: Int?, isStale: Bool) -> NSImage {
         let percent = min(max(remainingPercent ?? 0, 0), 100)
         let value = remainingPercent.map { "\($0)%" } ?? "—"
-        let image = NSImage(size: size, flipped: false) { _ in
-            draw(percent: percent, value: value, isStale: isStale)
-            return true
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        guard
+            let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width * scale),
+                pixelsHigh: Int(size.height * scale),
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            ),
+            let context = NSGraphicsContext(bitmapImageRep: bitmap)
+        else {
+            return NSImage(size: size)
         }
+
+        bitmap.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.cgContext.scaleBy(x: scale, y: scale)
+        draw(percent: percent, value: value, isStale: isStale)
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: size)
+        image.addRepresentation(bitmap)
         image.isTemplate = false
         return image
     }
@@ -56,8 +82,6 @@ enum MenuBarQuotaMeter {
     }
 
     private static func drawContent(value: String, isStale: Bool) {
-        let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
-        let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
         let textColor = isStale ? NSColor.systemOrange : NSColor.labelColor
         let prompt = isStale ? "!" : ">_"
 
