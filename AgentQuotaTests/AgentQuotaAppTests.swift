@@ -47,4 +47,36 @@ final class AgentQuotaAppTests: XCTestCase {
         XCTAssertEqual(full.size, MenuBarQuotaMeter.size)
         XCTAssertEqual(stale.size, MenuBarQuotaMeter.size)
     }
+
+    func testExecutableSettingsUpdatesSelectedPath() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "AgentQuotaSettingsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let bin = temporaryDirectory.appending(path: "bin", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let executable = bin.appending(path: "codex", directoryHint: .notDirectory)
+        XCTAssertTrue(FileManager.default.createFile(atPath: executable.path, contents: Data()))
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: executable.path
+        )
+        let configuration = CodexExecutableConfigurationStore(
+            homeDirectory: temporaryDirectory
+        )
+        let settings = CodexExecutableSettings(
+            locator: CodexLocator(
+                environment: ["PATH": ""],
+                homeDirectory: temporaryDirectory,
+                systemDirectories: [],
+                configurationStore: configuration
+            )
+        )
+
+        try settings.selectExecutable(executable)
+
+        XCTAssertEqual(settings.selectedExecutableURL?.path, executable.path)
+        XCTAssertEqual(try configuration.load()?.path, executable.path)
+        XCTAssertNil(settings.errorMessage)
+    }
 }

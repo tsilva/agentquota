@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @ObservedObject var store: QuotaStore
+    let openSettings: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -49,6 +50,10 @@ struct MenuBarContentView: View {
             Menu {
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await store.forceRefresh() }
+                }
+                Divider()
+                Button("Settings…", systemImage: "gearshape") {
+                    openSettings()
                 }
                 Divider()
                 Button("About AgentQuota", systemImage: "info.circle") {
@@ -188,6 +193,69 @@ struct MenuBarContentView: View {
             return "arrow.down.circle"
         default:
             return "wifi.exclamationmark"
+        }
+    }
+}
+
+struct CodexSettingsView: View {
+    @ObservedObject var settings: CodexExecutableSettings
+    let didSelectExecutable: () -> Void
+
+    @State private var selectionError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Codex executable")
+                .font(.title2.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AgentQuota uses this executable for quota reporting.")
+                    .foregroundStyle(.secondary)
+                Text(settings.selectedExecutableURL?.path ?? "No executable selected")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+            }
+
+            if let error = selectionError ?? settings.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Spacer()
+                Button("Choose Codex…") {
+                    chooseExecutable()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+    }
+
+    private func chooseExecutable() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose the Codex executable"
+        panel.message = "Select the Codex command AgentQuota should use."
+        panel.prompt = "Use Codex"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = settings.selectedExecutableURL?.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let executableURL = panel.url else {
+            return
+        }
+
+        do {
+            try settings.selectExecutable(executableURL)
+            selectionError = nil
+            didSelectExecutable()
+        } catch {
+            selectionError = error.localizedDescription
         }
     }
 }

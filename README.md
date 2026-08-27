@@ -32,7 +32,8 @@ xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platfo
 
 ## Notes
 
-- AgentQuota finds `codex` on `PATH`, then checks `~/.superset/bin`, `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`.
+- On first launch, AgentQuota checks standard Codex installation paths before `PATH` and wrapper locations, then saves the selected executable in `~/.agentquota/config.json`.
+- Use **Settings…** in the menu to select a different Codex executable. AgentQuota keeps using the saved path on later launches.
 - It refreshes when the menu opens, when Codex reports a quota update, every 60 seconds, or when you refresh manually.
 - The “Updated” age tracks the last observed quota-value change; successful checks that return identical values do not reset it.
 - Each quota row estimates whether and when it will run out using the average usage pace since that active window began. Forecasts use only the current snapshot and are not persisted.
@@ -43,6 +44,7 @@ xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platfo
 ## Troubleshooting
 
 - **Codex CLI not found:** confirm `codex --version` works, then reopen Xcode and choose **Retry**.
+- **Configured Codex unavailable:** open **Settings…**, then choose the current Codex executable.
 - **Sign-in required:** run `codex login`, finish authentication, and choose **Retry**.
 - **Quota reporting unsupported:** update the Codex CLI and choose **Retry**.
 - **App-server or network failure:** use **Refresh** or **Retry**; AgentQuota keeps the latest in-memory snapshot while reconnecting.
