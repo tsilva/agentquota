@@ -48,6 +48,57 @@ final class AgentQuotaAppTests: XCTestCase {
         XCTAssertEqual(stale.size, MenuBarQuotaMeter.size)
     }
 
+    func testMenuBarQuotaMeterCanRenderRepeatedly() {
+        let samples: [(remainingPercent: Int?, isStale: Bool)] = [
+            (nil, false),
+            (0, false),
+            (91, false),
+            (100, false),
+            (91, true),
+        ]
+
+        for iteration in 0..<2_000 {
+            autoreleasepool {
+                let sample = samples[iteration % samples.count]
+                let image = MenuBarQuotaMeter.image(
+                    remainingPercent: sample.remainingPercent,
+                    isStale: sample.isStale
+                )
+                var proposedRect = NSRect(origin: .zero, size: image.size)
+
+                XCTAssertNotNil(
+                    image.cgImage(
+                        forProposedRect: &proposedRect,
+                        context: nil,
+                        hints: nil
+                    )
+                )
+            }
+        }
+    }
+
+    func testMenuBarQuotaMeterDoesNotDeferDrawingToAppKit() throws {
+        let image = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: false)
+
+        XCTAssertFalse(image.representations.contains { $0 is NSCustomImageRep })
+        let bitmap = try XCTUnwrap(
+            image.representations.first { $0 is NSBitmapImageRep } as? NSBitmapImageRep
+        )
+
+        var visiblePixelBounds = NSRect.null
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide
+            where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.01 {
+                visiblePixelBounds = visiblePixelBounds.union(
+                    NSRect(x: x, y: y, width: 1, height: 1)
+                )
+            }
+        }
+
+        XCTAssertGreaterThan(visiblePixelBounds.width, 30)
+        XCTAssertGreaterThan(visiblePixelBounds.height, 8)
+    }
+
     func testExecutableSettingsUpdatesSelectedPath() throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appending(path: "AgentQuotaSettingsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
