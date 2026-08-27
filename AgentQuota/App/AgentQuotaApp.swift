@@ -96,14 +96,58 @@ enum MenuBarQuotaMeter {
 }
 
 @MainActor
+final class CodexExecutableSettings: ObservableObject {
+    @Published private(set) var selectedExecutableURL: URL?
+    @Published private(set) var errorMessage: String?
+
+    private let locator: CodexLocator
+
+    init(locator: CodexLocator = CodexLocator()) {
+        self.locator = locator
+        do {
+            selectedExecutableURL = try locator.configuredExecutable()
+        } catch {
+            selectedExecutableURL = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func locateExecutable() throws -> URL {
+        do {
+            let executableURL = try locator.locate()
+            selectedExecutableURL = executableURL
+            errorMessage = nil
+            return executableURL
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    func selectExecutable(_ executableURL: URL) throws {
+        do {
+            try locator.selectExecutable(executableURL)
+            selectedExecutableURL = executableURL.standardizedFileURL
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+}
+
+@MainActor
 final class AgentQuotaRuntime {
     static let shared = AgentQuotaRuntime()
 
+    let executableSettings: CodexExecutableSettings
     let store: QuotaStore
 
     private init() {
+        let executableSettings = CodexExecutableSettings()
+        self.executableSettings = executableSettings
         store = QuotaStore {
-            let executableURL = try CodexLocator().locate()
+            let executableURL = try executableSettings.locateExecutable()
             let transport = AppServerTransport(executableURL: executableURL)
             return CodexQuotaClient(transport: transport)
         }
@@ -120,6 +164,7 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
     private(set) var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var statusObservation: AnyCancellable?
+    private var settingsWindow: NSWindow?
 
     static func main() {
         let application = NSApplication.shared
@@ -129,6 +174,9 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return
+        }
         configureStatusItem()
         configurePopover()
         observeStore()
@@ -138,12 +186,17 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         statusObservation?.cancel()
         popover.performClose(nil)
+        settingsWindow?.close()
         removeStatusItem()
         store.shutdown()
     }
 
     private var store: QuotaStore {
         AgentQuotaRuntime.shared.store
+    }
+
+    private var executableSettings: CodexExecutableSettings {
+        AgentQuotaRuntime.shared.executableSettings
     }
 
     func configureStatusItem() {
@@ -184,9 +237,46 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
     private func configurePopover() {
         popover.behavior = .transient
         popover.animates = true
-        let hostingController = NSHostingController(rootView: MenuBarContentView(store: store))
+        let hostingController = NSHostingController(
+            rootView: MenuBarContentView(
+                store: store,
+                openSettings: { [weak self] in
+                    self?.showSettings()
+                }
+            )
+        )
         hostingController.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hostingController
+    }
+
+    private func showSettings() {
+        popover.performClose(nil)
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = CodexSettingsView(
+            settings: executableSettings,
+            didSelectExecutable: { [weak self] in
+                self?.store.retry()
+            }
+        )
+        let hostingController = NSHostingController(rootView: settingsView)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 220),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AgentQuota Settings"
+        window.contentViewController = hostingController
+        window.isReleasedWhenClosed = false
+        window.center()
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     private func observeStore() {
