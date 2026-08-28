@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 enum MenuBarQuotaMeter {
-    static let size = NSSize(width: 44, height: 19)
+    static let maximumSize = NSSize(width: 44, height: 19)
 
     private static let promptValueSpacing: CGFloat = 1.5
     private static let progressInset: CGFloat = 2
@@ -17,6 +17,7 @@ enum MenuBarQuotaMeter {
     static func image(remainingPercent: Int?, isStale: Bool) -> NSImage {
         let percent = min(max(remainingPercent ?? 0, 0), 100)
         let value = remainingPercent.map { "\($0)%" } ?? "—"
+        let size = size(remainingPercent: remainingPercent)
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         guard
             let bitmap = NSBitmapImageRep(
@@ -40,7 +41,7 @@ enum MenuBarQuotaMeter {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.cgContext.scaleBy(x: scale, y: scale)
-        draw(percent: percent, value: value, isStale: isStale)
+        draw(percent: percent, value: value, isStale: isStale, size: size)
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: size)
@@ -49,13 +50,13 @@ enum MenuBarQuotaMeter {
         return image
     }
 
-    private static func draw(percent: Int, value: String, isStale: Bool) {
+    private static func draw(percent: Int, value: String, isStale: Bool, size: NSSize) {
         NSGraphicsContext.current?.shouldAntialias = true
-        drawProgress(percent: percent, isStale: isStale)
-        drawContent(value: value, isStale: isStale)
+        drawProgress(percent: percent, isStale: isStale, size: size)
+        drawContent(value: value, isStale: isStale, size: size)
     }
 
-    private static func drawProgress(percent: Int, isStale: Bool) {
+    private static func drawProgress(percent: Int, isStale: Bool, size: NSSize) {
         let startX = progressInset
         let endX = size.width - progressInset
 
@@ -81,7 +82,7 @@ enum MenuBarQuotaMeter {
         fillPath.stroke()
     }
 
-    private static func drawContent(value: String, isStale: Bool) {
+    private static func drawContent(value: String, isStale: Bool, size: NSSize) {
         let textColor = isStale ? NSColor.systemOrange : NSColor.labelColor
         let prompt = isStale ? "!" : ">_"
 
@@ -95,9 +96,8 @@ enum MenuBarQuotaMeter {
         ]
         let promptSlotSize = (">_" as NSString).size(withAttributes: promptAttributes)
         let promptSize = (prompt as NSString).size(withAttributes: promptAttributes)
-        let maximumValueSize = ("100%" as NSString).size(withAttributes: valueAttributes)
         let valueSize = (value as NSString).size(withAttributes: valueAttributes)
-        let contentWidth = promptSlotSize.width + promptValueSpacing + maximumValueSize.width
+        let contentWidth = promptSlotSize.width + promptValueSpacing + valueSize.width
         let contentX = floor((size.width - contentWidth) / 2)
 
         let promptRect = NSRect(
@@ -109,13 +109,30 @@ enum MenuBarQuotaMeter {
         (prompt as NSString).draw(in: promptRect, withAttributes: promptAttributes)
 
         let valueRect = NSRect(
-            x: contentX + promptSlotSize.width + promptValueSpacing
-                + maximumValueSize.width - valueSize.width,
+            x: contentX + promptSlotSize.width + promptValueSpacing,
             y: floor((size.height - valueSize.height) / 2) + 1,
             width: valueSize.width,
             height: valueSize.height
         )
         (value as NSString).draw(in: valueRect, withAttributes: valueAttributes)
+    }
+
+    private static func size(remainingPercent: Int?) -> NSSize {
+        guard let remainingPercent, remainingPercent < 100 else {
+            return maximumSize
+        }
+
+        let valueAttributes: [NSAttributedString.Key: Any] = [.font: valueFont]
+        let maximumValueWidth = ("100%" as NSString).size(withAttributes: valueAttributes).width
+        let valueWidth = ("\(remainingPercent)%" as NSString)
+            .size(withAttributes: valueAttributes)
+            .width
+        let reclaimedWidth = max(maximumValueWidth - valueWidth, 0)
+
+        return NSSize(
+            width: ceil(maximumSize.width - reclaimedWidth),
+            height: maximumSize.height
+        )
     }
 }
 
