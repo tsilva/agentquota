@@ -21,7 +21,10 @@ final class AgentQuotaAppTests: XCTestCase {
         )
         XCTAssertEqual(button.title, "")
         XCTAssertEqual(button.imageScaling, .scaleNone)
-        XCTAssertEqual(button.image?.size, MenuBarQuotaMeter.size)
+        XCTAssertEqual(
+            button.image?.size,
+            MenuBarQuotaMeter.image(remainingPercent: nil, isStale: false).size
+        )
         XCTAssertFalse(try XCTUnwrap(button.image).isTemplate)
         XCTAssertGreaterThan(button.frame.height, 0)
 
@@ -35,17 +38,36 @@ final class AgentQuotaAppTests: XCTestCase {
         XCTAssertGreaterThan(button.window?.frame.height ?? 0, 0)
     }
 
-    func testMenuBarQuotaMeterKeepsAFixedFootprint() {
+    func testMenuBarQuotaMeterReclaimsUnusedPercentageWidth() {
         let loading = MenuBarQuotaMeter.image(remainingPercent: nil, isStale: false)
+        let singleDigit = MenuBarQuotaMeter.image(remainingPercent: 9, isStale: false)
         let partial = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: false)
+        let partialAtSameWidth = MenuBarQuotaMeter.image(remainingPercent: 10, isStale: false)
         let full = MenuBarQuotaMeter.image(remainingPercent: 100, isStale: false)
         let stale = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: true)
 
-        XCTAssertEqual(MenuBarQuotaMeter.size, NSSize(width: 44, height: 19))
-        XCTAssertEqual(loading.size, MenuBarQuotaMeter.size)
-        XCTAssertEqual(partial.size, MenuBarQuotaMeter.size)
-        XCTAssertEqual(full.size, MenuBarQuotaMeter.size)
-        XCTAssertEqual(stale.size, MenuBarQuotaMeter.size)
+        XCTAssertEqual(MenuBarQuotaMeter.maximumSize, NSSize(width: 44, height: 19))
+        XCTAssertEqual(loading.size, MenuBarQuotaMeter.maximumSize)
+        XCTAssertEqual(full.size, MenuBarQuotaMeter.maximumSize)
+        XCTAssertLessThan(partial.size.width, full.size.width)
+        XCTAssertLessThan(singleDigit.size.width, partial.size.width)
+        XCTAssertEqual(partialAtSameWidth.size, partial.size)
+        XCTAssertEqual(stale.size, partial.size)
+        XCTAssertEqual(singleDigit.size.height, MenuBarQuotaMeter.maximumSize.height)
+        XCTAssertEqual(partial.size.height, MenuBarQuotaMeter.maximumSize.height)
+    }
+
+    func testVariableStatusItemUsesAdaptiveImageWidth() throws {
+        let app = AgentQuotaApp()
+        app.configureStatusItem()
+        defer { app.removeStatusItem() }
+        let button = try XCTUnwrap(app.statusItem?.button)
+
+        button.image = MenuBarQuotaMeter.image(remainingPercent: 100, isStale: false)
+        let fullWidth = button.intrinsicContentSize.width
+        button.image = MenuBarQuotaMeter.image(remainingPercent: 94, isStale: false)
+
+        XCTAssertLessThan(button.intrinsicContentSize.width, fullWidth)
     }
 
     func testMenuBarQuotaMeterCanRenderRepeatedly() {

@@ -59,6 +59,67 @@ final result: passed
 
 ---
 
+# Adaptive Menu-Bar Meter Design QA
+
+## Comparison Target
+
+- Source visual truth: the user-provided 94% status-item screenshot, preserved as the focused crop `docs/qa/agentquota-menu-meter-adaptive-source.png`, together with the explicit request to reclaim the unused `100%` digit column.
+- Rendered implementation: `docs/qa/agentquota-menu-meter-adaptive-implementation.png`.
+- Combined comparison: `docs/qa/agentquota-menu-meter-adaptive-comparison.png` (source before state on the left, adaptive implementation on the right).
+- Viewport: native AppKit status-item image. The implementation is 39 × 19 points at 94%; the previous maximum footprint remains 44 × 19 points at 100% and while loading.
+- State: fresh quota snapshot at 94% remaining.
+- Source dimensions: 136 × 60 pixels at 144 ppi; the focused visible meter crop is 83 × 26 pixels.
+- Implementation dimensions: 78 × 38 pixels at 144 ppi (`@2x`), corresponding to 39 × 19 native points.
+- CSS size / device scale factor: not applicable to this native AppKit component. The comparison normalizes both focused artifacts to 216 pixels high and preserves their aspect ratios.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+The adaptive render removes the blank digit-sized gap visible between `>_` and `94%` and shortens the progress track by the same reclaimed width. Two-digit percentages now use a 39-point image and one-digit percentages use 33 points; `100%` and the loading state retain the original 44-point maximum so neither clips.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: the existing native 9-point monospaced prompt and monospaced-digit value fonts, weights, baseline, and antialiasing are unchanged. The prompt/value gap now stays at the intended 1.5 points instead of expanding by the missing digit column.
+- Spacing and layout rhythm: the value is laid out at its intrinsic width, and the image plus progress track reclaim only unused whole-point width. Outer balance and the 19-point menu-bar height remain unchanged.
+- Colors and visual tokens: semantic label color, muted track, system-blue fill, and stale orange remain unchanged.
+- Image quality and asset fidelity: the implementation is rendered directly from the production AppKit bitmap drawing code at the native backing scale. There are no raster substitutes, decorative assets, or approximated icons.
+- Copy and content: the meter still shows the literal terminal prompt and exact remaining percentage; loading, stale, tooltip, and accessibility copy are unchanged.
+
+## Full-View Comparison Evidence
+
+`docs/qa/agentquota-menu-meter-adaptive-comparison.png` places the original 94% meter and revised production render side by side at equal height. It shows the removed blank digit column, tighter overall silhouette, and proportionally shorter progress treatment without changing the established typography or color hierarchy.
+
+## Focused Region Evidence
+
+The meter is itself the focused region and fills the comparison image. Prompt/value spacing, baseline, progress inset, line weight, fill proportion, and overall width are all readable, so a second crop is unnecessary.
+
+## Comparison History
+
+1. The supplied source screenshot exposed one P2 density issue: the fixed 44-point `100%` value slot left a digit-sized blank gap at 94%, while the progress track and status-item image kept their maximum width.
+2. The implementation now sizes the image from the displayed digit count and lays out the percentage at its intrinsic width. Tests cover two-digit, one-digit, 100%, loading, and stale states.
+3. Post-fix evidence in `docs/qa/agentquota-menu-meter-adaptive-comparison.png` shows a 10-pixel reduction in the visible 94% component at `@2x`, the intended compact prompt/value gap, and no clipping or alignment regression.
+
+## Open Questions
+
+None.
+
+## Implementation Checklist
+
+- [x] Reclaim the unused third digit column below 100%.
+- [x] Reclaim both unused digit columns for one-digit percentages.
+- [x] Keep 100% and loading states at the safe maximum width.
+- [x] Shorten the progress track with the status-item image.
+- [x] Preserve height, typography, colors, stale state, tooltip, and accessibility behavior.
+
+## Follow-up Polish
+
+No remaining P3 visual refinements were identified in the focused component comparison.
+
+final result: passed
+
+---
+
 # Borderless Menu-Bar Meter Design QA
 
 ## Comparison Target
