@@ -14,13 +14,81 @@ struct QuotaSnapshot: Equatable, Sendable {
     var lowestRemainingPercent: Int? {
         tightestWindow?.remainingPercent
     }
+
+    func forecastWarning(relativeTo now: Date) -> (window: QuotaWindow, forecast: QuotaExhaustionForecast)? {
+        windows.compactMap { window in
+            let forecast = window.exhaustionForecast(relativeTo: now)
+            return forecast.warningSymbolName == nil ? nil : (window: window, forecast: forecast)
+        }.max { lhs, rhs in
+            if lhs.forecast.warningPriority != rhs.forecast.warningPriority {
+                return lhs.forecast.warningPriority < rhs.forecast.warningPriority
+            }
+            switch (lhs.forecast, rhs.forecast) {
+            case let (.runsOut(left), .runsOut(right)):
+                return left > right
+            case let (.unusedAtReset(left), .unusedAtReset(right)):
+                return left < right
+            default:
+                return false
+            }
+        }
+    }
 }
 
 enum QuotaExhaustionForecast: Equatable, Sendable {
     case runsOut(at: Date)
+    case unusedAtReset(percent: Int)
     case lastsUntilReset
     case exhausted
     case unavailable
+
+    var title: String {
+        switch self {
+        case .runsOut:
+            return "Runs out before reset"
+        case let .unusedAtReset(percent):
+            return "\(percent)% likely unused at reset"
+        case .lastsUntilReset:
+            return "On track until reset"
+        case .exhausted:
+            return "Quota exhausted"
+        case .unavailable:
+            return "Forecast unavailable"
+        }
+    }
+
+    var warningSymbolName: String? {
+        switch self {
+        case .runsOut, .exhausted:
+            return "exclamationmark.triangle"
+        case .unusedAtReset:
+            return "hourglass"
+        case .lastsUntilReset, .unavailable:
+            return nil
+        }
+    }
+
+    fileprivate var warningPriority: Int {
+        switch self {
+        case .exhausted: return 3
+        case .runsOut: return 2
+        case .unusedAtReset: return 1
+        case .lastsUntilReset, .unavailable: return 0
+        }
+    }
+
+    func detailDescription(relativeTo now: Date) -> String {
+        switch self {
+        case .runsOut:
+            return statusDescription(relativeTo: now).replacingOccurrences(of: ": ", with: " · ")
+        case .unusedAtReset, .lastsUntilReset:
+            return "Forecast at your current pace"
+        case .exhausted:
+            return "Available again at the next reset"
+        case .unavailable:
+            return "Waiting for an active quota window"
+        }
+    }
 
     func statusDescription(relativeTo now: Date) -> String {
         switch self {
@@ -30,8 +98,8 @@ enum QuotaExhaustionForecast: Equatable, Sendable {
                 return "At current pace: runs out now"
             }
             return "At current pace: runs out \(Self.countdown(seconds: seconds))"
-        case .lastsUntilReset:
-            return "At current pace: lasts until reset"
+        case .unusedAtReset, .lastsUntilReset:
+            return title
         case .exhausted:
             return "Quota exhausted"
         case .unavailable:
@@ -155,7 +223,7 @@ struct QuotaWindow: Equatable, Identifiable, Sendable {
         }
 
         guard consumedPercent > 0 else {
-            return .lastsUntilReset
+            return .unusedAtReset(percent: 100)
         }
 
         let secondsUntilExhaustion = elapsed
@@ -166,8 +234,14 @@ struct QuotaWindow: Equatable, Identifiable, Sendable {
         }
 
         let predictedExhaustion = now.addingTimeInterval(secondsUntilExhaustion)
-        return predictedExhaustion < resetsAt
-            ? .runsOut(at: predictedExhaustion)
+        if predictedExhaustion < resetsAt {
+            return .runsOut(at: predictedExhaustion)
+        }
+
+        let projectedUnused = max(100 - Double(consumedPercent) * duration / elapsed, 0)
+        // Ignore small leftovers so near-balanced usage has a quiet on-track state.
+        return projectedUnused >= 5
+            ? .unusedAtReset(percent: Int(projectedUnused.rounded()))
             : .lastsUntilReset
     }
 

@@ -102,6 +102,13 @@ final class QuotaStore: ObservableObject {
         snapshot?.lowestRemainingPercent.map { "\($0)%" } ?? "—"
     }
 
+    var menuBarForecastWarning: (window: QuotaWindow, forecast: QuotaExhaustionForecast)? {
+        guard connectionState.isConnected, !isSnapshotStale else {
+            return nil
+        }
+        return snapshot?.forecastWarning(relativeTo: currentDate)
+    }
+
     var isSnapshotStale: Bool {
         guard let snapshot else {
             return false

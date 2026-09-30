@@ -59,7 +59,7 @@ final class QuotaModelsTests: XCTestCase {
         )
     }
 
-    func testForecastLastsWhenExhaustionIsAtOrAfterReset() {
+    func testForecastDistinguishesBalancedUsageFromUnusedQuota() {
         let start = Date(timeIntervalSince1970: 10_000)
         let reset = start.addingTimeInterval(5 * 3_600)
 
@@ -71,7 +71,67 @@ final class QuotaModelsTests: XCTestCase {
         XCTAssertEqual(
             makeWindow(used: 10, duration: 300, resetsAt: reset)
                 .exhaustionForecast(relativeTo: start.addingTimeInterval(3_600)),
+            .unusedAtReset(percent: 50)
+        )
+    }
+
+    func testUnusedForecastThresholdAndRounding() {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let reset = start.addingTimeInterval(5 * 3_600)
+        let now = start.addingTimeInterval(3_600)
+
+        XCTAssertEqual(
+            makeWindow(used: 19, resetsAt: reset).exhaustionForecast(relativeTo: now),
+            .unusedAtReset(percent: 5)
+        )
+        XCTAssertEqual(
+            makeWindow(used: 19, resetsAt: reset)
+                .exhaustionForecast(relativeTo: now.addingTimeInterval(-10)),
             .lastsUntilReset
+        )
+        XCTAssertEqual(
+            makeWindow(used: 19, resetsAt: reset)
+                .exhaustionForecast(relativeTo: now.addingTimeInterval(30)),
+            .unusedAtReset(percent: 6)
+        )
+    }
+
+    func testMenuWarningPrioritizesRunOutOverTightestWindowAndUnusedQuota() throws {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let now = start.addingTimeInterval(3_600)
+        let unused = makeWindow(id: "unused", used: 10, resetsAt: start.addingTimeInterval(5 * 3_600))
+        let balanced = makeWindow(id: "balanced", used: 50, duration: 120, resetsAt: start.addingTimeInterval(2 * 3_600))
+        let runsOut = makeWindow(id: "runout", used: 40, resetsAt: start.addingTimeInterval(5 * 3_600))
+        let earlier = makeWindow(id: "earlier", used: 45, resetsAt: start.addingTimeInterval(5 * 3_600))
+        let snapshot = QuotaSnapshot(planName: "Pro", windows: [unused, balanced, runsOut, earlier], updatedAt: now)
+
+        XCTAssertEqual(snapshot.tightestWindow?.id, "balanced")
+        XCTAssertEqual(try XCTUnwrap(snapshot.forecastWarning(relativeTo: now)).window.id, "earlier")
+        let exhausted = makeWindow(id: "exhausted", used: 100)
+        XCTAssertEqual(
+            QuotaSnapshot(planName: "Pro", windows: snapshot.windows + [exhausted], updatedAt: now)
+                .forecastWarning(relativeTo: now)?.window.id,
+            "exhausted"
+        )
+    }
+
+    func testMenuWarningSelectsLargestUnusedForecastAndIgnoresUnavailableWindows() {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let now = start.addingTimeInterval(3_600)
+        let reset = start.addingTimeInterval(5 * 3_600)
+        let windows = [
+            makeWindow(id: "small", used: 15, resetsAt: reset),
+            makeWindow(id: "large", used: 10, resetsAt: reset),
+            makeWindow(id: "unknown", used: 0, duration: nil, resetsAt: nil)
+        ]
+        XCTAssertEqual(
+            QuotaSnapshot(planName: "Pro", windows: windows, updatedAt: now)
+                .forecastWarning(relativeTo: now)?.window.id,
+            "large"
+        )
+        XCTAssertNil(
+            QuotaSnapshot(planName: "Pro", windows: [windows[2]], updatedAt: now)
+                .forecastWarning(relativeTo: now)
         )
     }
 
@@ -83,12 +143,12 @@ final class QuotaModelsTests: XCTestCase {
         XCTAssertEqual(
             makeWindow(used: 0, duration: 300, resetsAt: reset)
                 .exhaustionForecast(relativeTo: now),
-            .lastsUntilReset
+            .unusedAtReset(percent: 100)
         )
         XCTAssertEqual(
             makeWindow(used: -20, duration: 300, resetsAt: reset)
                 .exhaustionForecast(relativeTo: now),
-            .lastsUntilReset
+            .unusedAtReset(percent: 100)
         )
         XCTAssertEqual(
             makeWindow(used: 100, duration: nil, resetsAt: nil)
@@ -153,7 +213,7 @@ final class QuotaModelsTests: XCTestCase {
         )
         XCTAssertEqual(
             QuotaExhaustionForecast.lastsUntilReset.statusDescription(relativeTo: now),
-            "At current pace: lasts until reset"
+            "On track until reset"
         )
         XCTAssertEqual(
             QuotaExhaustionForecast.exhausted.statusDescription(relativeTo: now),
@@ -164,6 +224,12 @@ final class QuotaModelsTests: XCTestCase {
             "Run-out prediction unavailable"
         )
         XCTAssertNil(QuotaExhaustionForecast.lastsUntilReset.localRunOutDescription())
+        XCTAssertEqual(forecast.title, "Runs out before reset")
+        XCTAssertEqual(forecast.detailDescription(relativeTo: now), "At current pace · runs out in 2h 15m")
+        XCTAssertEqual(QuotaExhaustionForecast.unusedAtReset(percent: 42).title, "42% likely unused at reset")
+        XCTAssertEqual(QuotaExhaustionForecast.unusedAtReset(percent: 42).warningSymbolName, "hourglass")
+        XCTAssertEqual(forecast.warningSymbolName, "exclamationmark.triangle")
+        XCTAssertNil(QuotaExhaustionForecast.lastsUntilReset.warningSymbolName)
     }
 
     func testUnknownPlanTypesRemainDisplayable() {

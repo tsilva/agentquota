@@ -4,6 +4,34 @@ import XCTest
 
 @MainActor
 final class AgentQuotaAppTests: XCTestCase {
+    func testForecastSymbolsAddVisibleWidthAndStaleStateSuppressesThem() throws {
+        let base = MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false)
+        for forecast in [QuotaExhaustionForecast.runsOut(at: Date()), .unusedAtReset(percent: 42), .exhausted] {
+            let image = MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false, forecast: forecast)
+            XCTAssertEqual(image.size.width, base.size.width + 14)
+            XCTAssertEqual(image.size.height, base.size.height)
+            let bitmap = try XCTUnwrap(image.representations.first as? NSBitmapImageRep)
+            let scale = CGFloat(bitmap.pixelsWide) / image.size.width
+            var coloredPixels = 0
+            for x in Int(base.size.width * scale)..<bitmap.pixelsWide {
+                for y in 0..<bitmap.pixelsHigh {
+                    if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.1,
+                       color.redComponent > color.blueComponent + 0.1 {
+                        coloredPixels += 1
+                    }
+                }
+            }
+            XCTAssertGreaterThan(coloredPixels, 10, "The forecast icon must be drawn in its warning color")
+            XCTAssertEqual(
+                MenuBarQuotaMeter.image(remainingPercent: 76, isStale: true, forecast: forecast).size,
+                base.size
+            )
+        }
+        for forecast in [QuotaExhaustionForecast.lastsUntilReset, .unavailable] {
+            XCTAssertEqual(MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false, forecast: forecast).size, base.size)
+        }
+    }
+
     func testStatusItemRegistersVisibleNotchSafePlacement() async throws {
         let app = AgentQuotaApp()
         app.configureStatusItem()

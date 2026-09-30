@@ -36,7 +36,8 @@ xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platfo
 - Use **Settings…** in the menu to select a different Codex executable. AgentQuota keeps using the saved path on later launches.
 - It refreshes when the menu opens, when Codex reports a quota update, every 60 seconds, or when you refresh manually.
 - The “Updated” age tracks the last observed quota-value change; successful checks that return identical values do not reset it.
-- Each quota row estimates whether and when it will run out using the average usage pace since that active window began. Forecasts use only the current snapshot and are not persisted.
+- Each quota row forecasts average usage since that active window began: a red triangle warns it will run out before reset, and an amber hourglass shows the percentage likely to remain unused at reset. Projected leftovers below 5% show a quiet “On track until reset” state. Quota bars stay blue.
+- The menu bar repeats the forecast icon, prioritizing exhausted quota and the earliest run-out across all windows before unused quota. Its tooltip identifies the window and forecast. Forecast icons are hidden while disconnected or stale. Forecasts use only the current snapshot and are not persisted.
 - The last successful snapshot stays in memory during transient failures and becomes stale after two minutes.
 - Reconnect attempts back off through 1, 2, 5, and 30 seconds.
 - This is an unsandboxed, locally signed developer build because it must run the local Codex executable. There is no notarized public release pipeline.

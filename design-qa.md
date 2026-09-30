@@ -1,5 +1,17 @@
 # AgentQuota Design QA
 
+## Quota Forecast States — 2026-09-30
+
+- Approved concept: `docs/reference/agentquota-forecast-concept.png`.
+- Native production render: `docs/qa/agentquota-forecast-states.png`, rendered from `MenuBarContentView` and `MenuBarQuotaMeter` with fixture quota snapshots in dark appearance. Each popover is 350 points wide; the combined 1146 × 370-point view is saved at 2× scale.
+- Running out: red outlined triangle, “Runs out before reset”, and time until depletion. Unused at reset: amber hourglass, projected unused percentage, and a current-pace subtitle. The forecast symbol is repeated beside the menu-bar percentage.
+- Balanced usage remains a quiet “On track until reset” line. Quota bars remain blue, and the connection dot remains green while connected.
+- Fixture values are internally consistent with average usage since the window began: at the midpoint of a weekly window, 24% remaining runs out in 1d 2h, 76% remaining projects 52% unused, and 50% remaining lasts exactly until reset. Mockup values were illustrative.
+- Verified native text fit, icon visibility, neutral subtitle contrast, compact meter spacing, and matched warning-card heights. Forecast cards combine their accessible text and hide decorative icons from VoiceOver; menu-bar accessibility and tooltips name the affected quota window.
+- Model and rendering tests cover the 5% unused threshold, rounding, warning priority across windows, invalid timing, exhausted and zero usage, adaptive meter width, visible colored symbols, and stale/disconnected warning suppression.
+
+No actionable visual differences remain for the approved forecast treatment. Native typography, menu-bar layout, and popover density follow the existing app.
+
 ## Comparison Target
 
 - Source visual truth: `docs/reference/codex-weekly-quota-widget.png`
