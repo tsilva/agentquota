@@ -280,7 +280,7 @@ private struct QuotaWindowView: View {
                     Capsule()
                         .fill(.white.opacity(0.10))
                     Capsule()
-                        .fill(progressColor)
+                        .fill(.blue)
                         .frame(
                             width: geometry.size.width
                                 * CGFloat(window.remainingPercent) / 100
@@ -301,20 +301,7 @@ private struct QuotaWindowView: View {
             .foregroundStyle(.secondary)
             .monospacedDigit()
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(forecast.statusDescription(relativeTo: now))
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                if let localRunOutDescription = forecast.localRunOutDescription() {
-                    Text(localRunOutDescription)
-                        .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(forecastColor)
-            .monospacedDigit()
-            .accessibilityElement(children: .combine)
+            forecastContent
         }
     }
 
@@ -322,25 +309,52 @@ private struct QuotaWindowView: View {
         window.exhaustionForecast(relativeTo: now)
     }
 
-    private var forecastColor: Color {
-        switch forecast {
-        case .runsOut:
-            return .orange
-        case .exhausted:
-            return .red
-        case .lastsUntilReset, .unavailable:
-            return .secondary
+    @ViewBuilder
+    private var forecastContent: some View {
+        if let symbolName = forecast.warningSymbolName {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(forecastColor)
+                    .frame(width: 26)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(forecast.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(forecastColor)
+                    Text(forecast.detailDescription(relativeTo: now))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .monospacedDigit()
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(forecastColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(forecastColor.opacity(0.25), lineWidth: 1)
+            }
+            .help(forecast.localRunOutDescription().map { "Estimated run-out: \($0)" }
+                ?? "Based on average usage since this quota window began.")
+            .accessibilityElement(children: .combine)
+        } else {
+            Text(forecast.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
-    private var progressColor: Color {
-        switch window.remainingPercent {
-        case 0..<20:
-            return .red
-        case 20..<40:
+    private var forecastColor: Color {
+        switch forecast {
+        case .unusedAtReset:
             return .orange
-        default:
-            return .blue
+        case .runsOut, .exhausted:
+            return .red
+        case .lastsUntilReset, .unavailable:
+            return .secondary
         }
     }
 }

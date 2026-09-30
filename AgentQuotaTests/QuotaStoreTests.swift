@@ -4,6 +4,36 @@ import XCTest
 
 @MainActor
 final class QuotaStoreTests: XCTestCase {
+    func testForecastWarningIsHiddenForDisconnectedOrStaleData() async {
+        let base = Date(timeIntervalSince1970: 10_000)
+        var now = base
+        let quota = QuotaSnapshot(
+            planName: "Pro",
+            windows: [QuotaWindow(id: "weekly", usedPercent: 24, durationMinutes: 10_080,
+                                 resetsAt: base.addingTimeInterval(3.5 * 86_400))],
+            updatedAt: base
+        )
+        let client = FakeQuotaClient(readResults: [.success(quota), .success(quota),
+                                                 .failure(CodexQuotaClientError.networkUnavailable("offline"))])
+        let store = QuotaStore(clientFactory: { client }, now: { now })
+        XCTAssertNil(store.menuBarForecastWarning)
+        await store.refresh()
+        XCTAssertEqual(store.menuBarForecastWarning?.forecast, .unusedAtReset(percent: 52))
+
+        now = base.addingTimeInterval(120)
+        await store.refresh()
+        XCTAssertTrue(store.connectionState.isConnected)
+        XCTAssertTrue(store.isSnapshotStale)
+        XCTAssertNil(store.menuBarForecastWarning)
+
+        now = base.addingTimeInterval(60)
+        await store.refresh()
+        XCTAssertFalse(store.isSnapshotStale)
+        XCTAssertFalse(store.connectionState.isConnected)
+        XCTAssertNil(store.menuBarForecastWarning)
+        store.shutdown()
+    }
+
     func testSuccessfulManualRefreshUpdatesState() async {
         let client = FakeQuotaClient(readResults: [.success(snapshot(remaining: 59))])
         let store = QuotaStore(clientFactory: { client })

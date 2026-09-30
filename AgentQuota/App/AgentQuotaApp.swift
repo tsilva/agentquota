@@ -13,11 +13,21 @@ enum MenuBarQuotaMeter {
     private static let fillWidth: CGFloat = 1.5
     private static let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
     private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let warningWidth: CGFloat = 14
 
-    static func image(remainingPercent: Int?, isStale: Bool) -> NSImage {
+    static func image(
+        remainingPercent: Int?,
+        isStale: Bool,
+        forecast: QuotaExhaustionForecast? = nil
+    ) -> NSImage {
         let percent = min(max(remainingPercent ?? 0, 0), 100)
         let value = remainingPercent.map { "\($0)%" } ?? "—"
-        let size = size(remainingPercent: remainingPercent)
+        let meterSize = size(remainingPercent: remainingPercent)
+        let warning = isStale ? nil : forecast
+        let size = NSSize(
+            width: meterSize.width + (warning?.warningSymbolName == nil ? 0 : warningWidth),
+            height: meterSize.height
+        )
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         guard
             let bitmap = NSBitmapImageRep(
@@ -41,13 +51,28 @@ enum MenuBarQuotaMeter {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.cgContext.scaleBy(x: scale, y: scale)
-        draw(percent: percent, value: value, isStale: isStale, size: size)
+        draw(percent: percent, value: value, isStale: isStale, size: meterSize)
+        if let warning {
+            drawWarning(warning, after: meterSize)
+        }
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: size)
         image.addRepresentation(bitmap)
         image.isTemplate = false
         return image
+    }
+
+    private static func drawWarning(_ forecast: QuotaExhaustionForecast, after meterSize: NSSize) {
+        guard let symbolName = forecast.warningSymbolName else {
+            return
+        }
+        let color = forecast.warningColor
+        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: forecast.title)?
+            .withSymbolConfiguration(configuration)
+        symbol?.draw(in: NSRect(x: meterSize.width + 2, y: 4, width: 11, height: 11))
     }
 
     private static func draw(percent: Int, value: String, isStale: Bool, size: NSSize) {
@@ -133,6 +158,16 @@ enum MenuBarQuotaMeter {
             width: ceil(maximumSize.width - reclaimedWidth),
             height: maximumSize.height
         )
+    }
+}
+
+private extension QuotaExhaustionForecast {
+    var warningColor: NSColor {
+        switch self {
+        case .runsOut, .exhausted: return .systemRed
+        case .unusedAtReset: return .systemOrange
+        case .lastsUntilReset, .unavailable: return .labelColor
+        }
     }
 }
 
@@ -338,14 +373,20 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
         }
 
         let isStale = store.isSnapshotStale
+        let warning = store.menuBarForecastWarning
         button.image = MenuBarQuotaMeter.image(
             remainingPercent: store.snapshot?.lowestRemainingPercent,
-            isStale: isStale
+            isStale: isStale,
+            forecast: warning?.forecast
         )
         button.title = ""
         button.toolTip = isStale
             ? "Codex quota is stale: \(store.menuBarText) remaining"
             : "Codex quota: \(store.menuBarText) remaining"
+        if let warning {
+            button.toolTip? += "\n\(warning.window.durationLabel) quota: \(warning.forecast.title)"
+            button.toolTip? += "\n\(warning.forecast.detailDescription(relativeTo: store.currentDate))"
+        }
         button.setAccessibilityLabel(button.toolTip)
     }
 
