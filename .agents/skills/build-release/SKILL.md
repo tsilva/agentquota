@@ -5,6 +5,13 @@ description: Automatically version, build, verify, package, and publish AgentQuo
 
 # Build Release
 
+Read and apply the shared `$release-workflow` skill at
+`/Users/tsilva/.codex/skills/release-workflow/SKILL.md` before execution.
+It owns common preflight, publication safeguards, `$push` integration,
+workflow monitoring, verification, and reporting. The rules below are this
+project's adapter; they retain its invocation default and required gates.
+If the shared skill is unavailable, stop and report the missing dependency.
+
 Publish only from a clean, synchronized `main` branch. Releases are arm64,
 ad-hoc-signed developer builds for macOS 26; they are not notarized.
 
@@ -64,12 +71,6 @@ Upload release assets without GitHub display labels so the Assets list shows
 their complete filenames, including the version, platform, architecture, and
 checksum suffix.
 
-If any preflight, test, build, validation, upload, or publication step fails,
-stop and report the exact failure. Do not delete or replace tags/releases, force
-push, weaken validation, or publish a different version as a workaround.
-
-## Completion
-
-Report the release version, commit SHA, test/build result, artifact names,
-architecture and signing/notarization status, and the GitHub Release URL. For a
-dry run, state clearly that nothing was published.
+The script creates the release directly with `gh release create`; there is no
+Actions publication run to monitor. Verify the selected tag's published GitHub
+Release and DMG/checksum assets using the shared completion checks.
