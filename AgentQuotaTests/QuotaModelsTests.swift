@@ -59,6 +59,76 @@ final class QuotaModelsTests: XCTestCase {
         )
     }
 
+    func testUsageProjectionMatchesUnusedQuotaConcept() throws {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let duration = 5.0 * 3_600
+        let now = start.addingTimeInterval(duration * 34 / 56)
+        let window = makeWindow(used: 34, resetsAt: start.addingTimeInterval(duration))
+        let projection = try XCTUnwrap(window.usageProjection(relativeTo: now))
+
+        XCTAssertEqual(window.remainingPercent, 66)
+        XCTAssertEqual(projection.projectedUsedPercent, 56, accuracy: 0.0001)
+        XCTAssertEqual(projection.additionalWithinQuotaPercent, 22, accuracy: 0.0001)
+        XCTAssertEqual(projection.unusedPercent, 44, accuracy: 0.0001)
+        XCTAssertEqual(projection.overQuotaPercent, 0)
+        XCTAssertEqual(window.exhaustionForecast(relativeTo: now), .unusedAtReset(percent: 44))
+    }
+
+    func testUsageProjectionKeepsDemandBeyondQuota() throws {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let duration = 5.0 * 3_600
+        let now = start.addingTimeInterval(duration * 34 / 120)
+        let window = makeWindow(used: 34, resetsAt: start.addingTimeInterval(duration))
+        let projection = try XCTUnwrap(window.usageProjection(relativeTo: now))
+
+        XCTAssertEqual(window.remainingPercent, 66)
+        XCTAssertEqual(projection.projectedUsedPercent, 120, accuracy: 0.0001)
+        XCTAssertEqual(projection.additionalWithinQuotaPercent, 66, accuracy: 0.0001)
+        XCTAssertEqual(projection.overQuotaPercent, 20, accuracy: 0.0001)
+        XCTAssertEqual(projection.unusedPercent, 0)
+        guard case let .runsOut(at) = window.exhaustionForecast(relativeTo: now) else {
+            return XCTFail("Projected demand over 100% must run out before reset")
+        }
+        XCTAssertLessThan(at, try XCTUnwrap(window.resetsAt))
+    }
+
+    func testUsageProjectionPreservesLargeAndFractionalDemand() throws {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let reset = start.addingTimeInterval(5 * 3_600)
+        let window = makeWindow(used: 50, resetsAt: reset)
+        let early = try XCTUnwrap(window.usageProjection(relativeTo: start.addingTimeInterval(60)))
+        XCTAssertEqual(early.projectedUsedPercent, 15_000, accuracy: 0.0001)
+        XCTAssertEqual(early.overQuotaPercent, 14_900, accuracy: 0.0001)
+
+        let fractional = try XCTUnwrap(window.usageProjection(relativeTo: start.addingTimeInterval(10_800)))
+        XCTAssertEqual(fractional.projectedUsedPercent, 83.333333, accuracy: 0.0001)
+        XCTAssertEqual(fractional.unusedPercent, 16.666667, accuracy: 0.0001)
+        XCTAssertEqual(QuotaUsageProjection.percentDescription(0.2), "<1%")
+        XCTAssertEqual(QuotaUsageProjection.percentDescription(0.5), "1%")
+        XCTAssertEqual(QuotaUsageProjection.percentDescription(0), "0%")
+        XCTAssertEqual(QuotaUsageProjection.percentDescription(16.666667), "17%")
+        // Very early usage must not overflow an integer while formatting.
+        XCTAssertFalse(QuotaUsageProjection.percentDescription(Double(Int.max) * 2).isEmpty)
+    }
+
+    func testUsageProjectionHandlesZeroAndUnavailableTiming() throws {
+        let start = Date(timeIntervalSince1970: 10_000)
+        let reset = start.addingTimeInterval(5 * 3_600)
+        let now = start.addingTimeInterval(3_600)
+        let zero = try XCTUnwrap(makeWindow(used: 0, resetsAt: reset).usageProjection(relativeTo: now))
+        XCTAssertEqual(zero.projectedUsedPercent, 0)
+        XCTAssertEqual(zero.unusedPercent, 100)
+        XCTAssertEqual(makeWindow(used: -20, resetsAt: reset).usageProjection(relativeTo: now), zero)
+        XCTAssertNil(makeWindow(used: 20, duration: nil, resetsAt: reset).usageProjection(relativeTo: now))
+        XCTAssertNil(makeWindow(used: 20, duration: 0, resetsAt: reset).usageProjection(relativeTo: now))
+        XCTAssertNil(makeWindow(used: 20, resetsAt: nil).usageProjection(relativeTo: now))
+        XCTAssertNil(makeWindow(used: 20, resetsAt: reset).usageProjection(relativeTo: start))
+        XCTAssertNil(makeWindow(used: 20, resetsAt: reset).usageProjection(relativeTo: reset))
+        XCTAssertNil(makeWindow(used: 20, resetsAt: reset).usageProjection(relativeTo: start.addingTimeInterval(-1)))
+        XCTAssertNil(makeWindow(used: 100, resetsAt: reset).usageProjection(relativeTo: now))
+        XCTAssertNil(makeWindow(used: 140, resetsAt: reset).usageProjection(relativeTo: now))
+    }
+
     func testForecastDistinguishesBalancedUsageFromUnusedQuota() {
         let start = Date(timeIntervalSince1970: 10_000)
         let reset = start.addingTimeInterval(5 * 3_600)

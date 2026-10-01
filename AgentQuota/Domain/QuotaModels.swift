@@ -150,6 +150,26 @@ enum QuotaExhaustionForecast: Equatable, Sendable {
     }
 }
 
+/// Demand projected at the reset, including demand the quota would not allow.
+struct QuotaUsageProjection: Equatable, Sendable {
+    let usedPercent: Double
+    let projectedUsedPercent: Double
+
+    var additionalWithinQuotaPercent: Double {
+        max(min(projectedUsedPercent, 100) - usedPercent, 0)
+    }
+
+    var unusedPercent: Double { max(100 - projectedUsedPercent, 0) }
+    var overQuotaPercent: Double { max(projectedUsedPercent - 100, 0) }
+
+    static func percentDescription(_ percent: Double) -> String {
+        if percent > 0, percent < 0.5 {
+            return "<1%"
+        }
+        return percent.rounded().formatted(.number.precision(.fractionLength(0))) + "%"
+    }
+}
+
 struct QuotaWindow: Equatable, Identifiable, Sendable {
     let id: String
     let usedPercent: Int
@@ -202,23 +222,8 @@ struct QuotaWindow: Equatable, Identifiable, Sendable {
             return .exhausted
         }
 
-        guard
-            let durationMinutes,
-            durationMinutes > 0,
-            let resetsAt,
-            resetsAt > now
-        else {
-            return .unavailable
-        }
-
-        let duration = TimeInterval(durationMinutes) * 60
-        guard duration.isFinite, duration > 0 else {
-            return .unavailable
-        }
-
-        let windowStart = resetsAt.addingTimeInterval(-duration)
-        let elapsed = now.timeIntervalSince(windowStart)
-        guard elapsed > 0, elapsed < duration else {
+        guard let projection = usageProjection(relativeTo: now),
+              let durationMinutes, let resetsAt else {
             return .unavailable
         }
 
@@ -226,23 +231,52 @@ struct QuotaWindow: Equatable, Identifiable, Sendable {
             return .unusedAtReset(percent: 100)
         }
 
+        let duration = TimeInterval(durationMinutes) * 60
+        let elapsed = now.timeIntervalSince(resetsAt.addingTimeInterval(-duration))
         let secondsUntilExhaustion = elapsed
             * Double(100 - consumedPercent)
             / Double(consumedPercent)
-        guard secondsUntilExhaustion.isFinite, secondsUntilExhaustion >= 0 else {
-            return .unavailable
-        }
-
         let predictedExhaustion = now.addingTimeInterval(secondsUntilExhaustion)
         if predictedExhaustion < resetsAt {
             return .runsOut(at: predictedExhaustion)
         }
 
-        let projectedUnused = max(100 - Double(consumedPercent) * duration / elapsed, 0)
         // Ignore small leftovers so near-balanced usage has a quiet on-track state.
-        return projectedUnused >= 5
-            ? .unusedAtReset(percent: Int(projectedUnused.rounded()))
+        return projection.unusedPercent >= 5
+            ? .unusedAtReset(percent: Int(projection.unusedPercent.rounded()))
             : .lastsUntilReset
+    }
+
+    func usageProjection(relativeTo now: Date) -> QuotaUsageProjection? {
+        let consumedPercent = 100 - remainingPercent
+        // Once usage is capped, it no longer measures unconstrained demand.
+        guard consumedPercent < 100 else { return nil }
+        guard
+            let durationMinutes,
+            durationMinutes > 0,
+            let resetsAt,
+            resetsAt > now
+        else {
+            return nil
+        }
+
+        let duration = TimeInterval(durationMinutes) * 60
+        guard duration.isFinite, duration > 0 else {
+            return nil
+        }
+
+        let windowStart = resetsAt.addingTimeInterval(-duration)
+        let elapsed = now.timeIntervalSince(windowStart)
+        guard elapsed > 0, elapsed < duration else {
+            return nil
+        }
+
+        let projected = Double(consumedPercent) * duration / elapsed
+        guard projected.isFinite else { return nil }
+        return QuotaUsageProjection(
+            usedPercent: Double(consumedPercent),
+            projectedUsedPercent: projected
+        )
     }
 
     func resetCountdown(relativeTo now: Date) -> String {

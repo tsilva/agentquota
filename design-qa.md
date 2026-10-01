@@ -1,3 +1,130 @@
+# Simplified Quota Forecast — 2026-10-01
+
+## Comparison Target
+
+- Source visual truth: `docs/reference/agentquota-simple-quota-concept.png`, the user's approved alternative with fewer numbers.
+- Native production renders: `docs/qa/agentquota-simple-unused.png` and `docs/qa/agentquota-simple-over.png`.
+- Combined comparison: `docs/qa/agentquota-simple-comparison.png`; implementation preview: `docs/qa/agentquota-simple-states.png`.
+- Viewport: 400 × 283 native points (800 × 566 pixels at 2×) for active forecasts. Exhausted/unavailable states are 400 × 266 points (800 × 532 pixels).
+- Source dimensions: 1983 × 793 pixels. Each source card is cropped to 886 × 674 pixels and normalized to the same 400-point width. Combined comparison: 1680 × 1520 pixels at 2× backing scale. Browser CSS dimensions do not apply to native SwiftUI/AppKit.
+- Matched state: connected Pro account, weekly quota, 65% remaining now, 43% unused at reset / 20% projected demand over quota by reset. Reset countdowns reflect mathematically consistent fixture window timing rather than the illustrative shared date in the mockup.
+
+## Findings
+
+No actionable P0/P1/P2 findings remain in the first visual comparison of the final simplified production view.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: native system family and existing title/headline hierarchy are retained. The current remaining value explicitly includes “now”; a secondary “At this pace” label introduces the single bold forecast outcome. All text fits without truncation.
+- Spacing and layout rhythm: removed the endpoint callout and numeric segment row. Plain “Used so far” and “Expected use” legend items sit on the same row as the nonnumeric “Quota limit” caption. Removed the duplicate absolute reset date. The popover remains 400 points wide and shrinks to 283 points high while preserving readable spacing, header, countdown, and update footer.
+- Colors and tokens: solid blue actual usage, lighter hatched blue expected use, neutral unused track, hatched red demand beyond quota, amber unused outcome, red over-quota outcome, and green connection indicator match the approved alternative. The dashed limit stays fixed; native semantic foregrounds and material adapt to light and dark appearance.
+- Image quality and assets: the live chart and legend render with native SwiftUI Canvas; swatches are data marks, not substituted illustration assets. Settings, refresh, actual-usage swatch, and continuation arrow use native SF Symbols. The approved raster remains a reference artifact rather than embedded UI content.
+- Copy and content: active underuse/overuse cards show exactly two quota percentages: current remaining allowance and unused/over-quota outcome. Detailed used, additional expected, total projected usage, and local reset time move to hover text. Balanced, unavailable, and exhausted states retain their existing semantics without inventing an extra forecast number.
+
+## Evidence and State Coverage
+
+`docs/qa/agentquota-simple-comparison.png` places both approved cards above the corresponding real production renders at equal width. This tight component-only comparison makes the bar, legend, threshold caption, heading, summary, countdown, and controls readable without a separate focused crop.
+
+Additional production captures inspected:
+
+- `docs/qa/agentquota-simple-unused-light.png`: contrast, legend, and text fit in light appearance.
+- `docs/qa/agentquota-simple-balanced.png`: quiet on-track outcome with one current quota percentage.
+- `docs/qa/agentquota-simple-large-over.png`: continuation arrow and one full over-quota amount.
+- `docs/qa/agentquota-simple-zero.png`: zero usage and 100% unused outcome, without a decorative endpoint marker.
+- `docs/qa/agentquota-simple-unavailable.png`: actual usage and remaining quota retained; expected-use legend omitted.
+- `docs/qa/agentquota-simple-exhausted.png`: full actual usage and exhausted outcome without an extrapolated forecast.
+
+## Comparison History
+
+1. Removed the redundant quota figures and endpoint marker, replaced numeric segment labels with swatches/plain names, separated forecast context from its outcome, and moved the local reset date to the countdown's help text.
+2. Aligned the legend and quota-limit caption in one chart row before capture; this avoids retaining empty vertical space from the prior layout.
+3. Captured the final native production view and opened the approved image and combined comparison. The two key numbers, plain legend, compact hierarchy, and underuse/overuse states match the selected alternative. No actionable P0/P1/P2 differences were found.
+
+## Validation and Residual Gaps
+
+- The existing numerical forecast and edge-state tests remain applicable; this simplification does not change the forecast calculation.
+- Native production source compiled and rendered in eight fixture/appearance states; no text/legend collisions or clipped chart controls were observed. Existing UI settings and refresh actions are unchanged.
+- The chart retains its detailed accessibility value, so reducing visual numbers does not remove the data from VoiceOver. Manual VoiceOver navigation and hover interaction in the installed popover were not exercised; help text was checked in production source.
+- Complete macOS validation: `xcodebuild test -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS,arch=arm64' -derivedDataPath build/QuotaVisualizationDerivedData -quiet` passed all 60 tests with zero failures. `git diff --check` passed. The resulting application bundle is the launch candidate.
+
+## Implementation Checklist
+
+- [x] Show remaining quota now and one forecast outcome.
+- [x] Replace numerical segment labels with a plain legend.
+- [x] Preserve hatching, quota limit, and red overflow.
+- [x] Move detailed values and absolute reset time to hover.
+- [x] Preserve forecast edge states and accessibility data.
+- [x] Inspect final native dark/light and edge-state captures.
+- [x] Update README to explain the simplified card.
+
+final result: passed
+
+---
+
+# Unified Quota Usage and Forecast — 2026-10-01
+
+## Comparison Target
+
+- Source visual truth: `docs/reference/agentquota-unified-quota-concept.png` (the approved ImageGen mockup).
+- Native production renders: `docs/qa/agentquota-unified-unused.png` and `docs/qa/agentquota-unified-over.png`, captured from the actual `MenuBarContentView` with fixture clients and the production quota model.
+- Full-view comparison: `docs/qa/agentquota-unified-comparison.png` places both source cards above the corresponding native renders in the same image.
+- Implementation preview: `docs/qa/agentquota-unified-states.png`.
+- Viewport: 400 × 314 native points per popover; 800 × 628 pixels at 2× backing scale. Source image: 1774 × 887 pixels, with 795/799 × 650-pixel card crops normalized to 400-point width. Comparison: 1680 × 1520 pixels at 2×. CSS dimensions and browser density do not apply to this native SwiftUI/AppKit implementation.
+- Matched state: connected Pro account, weekly quota, 34% used and 66% remaining; projected usage 56% / 120%, unused quota 44% / demand over quota 20%.
+- Timing normalization: reset dates differ from the illustrative mockup. The fixtures use internally consistent elapsed weekly-window time for each projection; identical usage, elapsed time, and window duration cannot produce two different forecasts. Capture dates are formatted in Europe/Lisbon.
+
+## Findings
+
+No actionable P0/P1/P2 findings remain after the second comparison pass.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: native system family, semibold title/quota/summary hierarchy, caption metadata and monospaced numeric values. Current remaining quota stays prominent; endpoint and segment labels fit without clipping.
+- Spacing and layout rhythm: the popover expands from 350 to 400 points to accommodate the combined chart. The old warning box is replaced by one summary line. The limit caption occupies a separate chart row so all segment labels remain readable at native size; the summary is left aligned with existing app content. These adaptations preserve the mockup's compact hierarchy.
+- Colors and tokens: solid system blue denotes actual usage, lighter blue with diagonal hatching denotes forecast, a neutral empty track denotes unused quota, and red hatching denotes projected demand beyond the quota. Amber unused and red over-quota summaries match the source intent. The limit marker remains at 80% of the fixed 125% display scale in every state. Semantic foreground colors and native material support dark and light appearances.
+- Image quality and assets: this component is live data visualization rendered by SwiftUI Canvas, not raster artwork. Native SF Symbols remain in the gear, refresh control, and continuation cue. The approved reference is preserved as documentation, not embedded as interface content.
+- Copy and content: the matched cases read “At this pace: 44% unused at reset” and “At this pace: 20% over quota”. Demand over 125% retains its full numeric forecast and uses a continuation arrow. Near-balanced usage keeps the existing quiet on-track summary; missing timing and exhausted quota avoid unsupported extrapolation.
+
+## Full-View and Focused Evidence
+
+`docs/qa/agentquota-unified-comparison.png` verifies both complete native popovers against the selected design at equal width. The chart, labels, hatching, limit marker, and summary are legible in this tight component comparison, so an additional chart crop is unnecessary.
+
+Additional captures inspected:
+
+- `docs/qa/agentquota-unified-unused-light.png`: light appearance, forecast/actual contrast and readable limit marker.
+- `docs/qa/agentquota-unified-balanced.png`: 100% projected usage and a quiet summary.
+- `docs/qa/agentquota-unified-large-over.png`: 240% projected demand, 140% over quota, continuation arrow and no false endpoint at 125%.
+- `docs/qa/agentquota-unified-zero.png`: 0% usage, 100% unused, complete endpoint marker.
+- `docs/qa/agentquota-unified-exhausted.png`: 100% actual usage and quota-exhausted summary.
+- `docs/qa/agentquota-unified-unavailable.png`: actual usage retained without a forecast and a non-duplicated quota-window heading.
+
+## Comparison History
+
+1. Initial native/source comparison found a P2 forecast contrast mismatch: the translucent blue was darker than the approved lighter forecast fill. Edge-state captures also showed a clipped endpoint dot at zero and a misleading endpoint dot at the scale boundary for projections beyond 125%.
+2. Increased forecast-fill brightness while retaining colored hatching, inset the zero/end boundary dot, and replaced out-of-scale endpoint markers with a native continuation symbol. Corrected the missing-duration heading from “Quota window quota” to “Quota window”.
+3. Regenerated all native captures and the combined comparison from the final production source. Lighter forecasts are distinct from solid actual usage in both appearances; the zero marker is complete and large demand has a continuation arrow. No actionable P0/P1/P2 issues remain.
+
+## Validation and Residual Gaps
+
+- `xcodebuild test -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS,arch=arm64' -derivedDataPath build/QuotaVisualizationDerivedData -quiet`: 60 tests passed, zero failed, successful exit.
+- Added numerical coverage for the approved 56%/120% projections, fractional and very large demand, rounding, zero/negative usage, exhausted quota, and missing/invalid timing. Existing run-out timing, quiet threshold, multi-window warning priority, stale state, refresh, and executable-selection tests continue to pass.
+- Native production views compiled and rendered successfully in eight fixture/appearance states. `git diff --check` passed.
+- The chart exposes actual usage, projected usage, limit, and unused/over-quota amounts in one accessibility value; the visible labels remain available. Live VoiceOver navigation and manual clicks in the installed application's popover were not exercised. Existing gear/refresh/settings actions are unchanged.
+
+## Implementation Checklist
+
+- [x] Keep current remaining quota prominent.
+- [x] Combine actual, forecast, unused and overflow in one fixed-scale bar.
+- [x] Keep a stable, labeled quota limit and truthful continuation state.
+- [x] Replace the separate warning box with a concise quantified summary.
+- [x] Verify native dark/light appearance and edge states.
+- [x] Preserve current forecast timing, quiet threshold and menu-bar warnings.
+- [x] Document the new quota-bar behavior in README.
+
+final result: passed
+
+---
+
 # AgentQuota Design QA
 
 ## Quota Forecast States — 2026-09-30
