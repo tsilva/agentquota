@@ -1,3 +1,13 @@
+# Menu-Bar Usage Indicator QA
+
+The menu-bar indicator now pairs the remaining percentage with a miniature version of the popover chart. Solid blue means usage so far, striped blue means additional expected usage, and striped red means forecast demand beyond the fixed quota limit. The terminal prompt, underline, and separate forecast symbol have been replaced. Both the number and chart use the tightest quota window; the tooltip still reports the highest-priority forecast across all windows.
+
+Native production rendering is saved in `docs/qa/agentquota-menu-meter-unified-states.png`. Eight states were reviewed in both dark and light appearance: unused at reset, over quota, beyond the visible scale, zero usage, exhausted, unavailable forecast, cached data, and loading. The 26 × 9-point chart and 11-point percentage fit a 19-point-high image. The image reclaims unused digit width; forecast changes do not change its footprint. Cached data shows a clock with the cached number, and disconnected data omits the forecast.
+
+Validation: all 60 macOS tests passed with zero failures using `build/MenuBarMeterDerivedData`. Updated rendering regression checks cover steady forecast width, visible red overflow only beyond the limit, stale forecast suppression, adaptive number width, and repeated eager bitmap rendering. `git diff --check` passed. Native renders show no clipping or light/dark contrast issues.
+
+---
+
 # Simplified Quota Forecast — 2026-10-01
 
 ## Comparison Target
