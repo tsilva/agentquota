@@ -4,31 +4,36 @@ import XCTest
 
 @MainActor
 final class AgentQuotaAppTests: XCTestCase {
-    func testForecastSymbolsAddVisibleWidthAndStaleStateSuppressesThem() throws {
-        let base = MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false)
-        for forecast in [QuotaExhaustionForecast.runsOut(at: Date()), .unusedAtReset(percent: 42), .exhausted] {
-            let image = MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false, forecast: forecast)
-            XCTAssertEqual(image.size.width, base.size.width + 14)
-            XCTAssertEqual(image.size.height, base.size.height)
+    func testForecastUsesTheSameFootprintAndStaleDataHidesTheProjection() throws {
+        let base = MenuBarQuotaMeter.image(remainingPercent: 65, isStale: false)
+        let stale = MenuBarQuotaMeter.image(remainingPercent: 65, isStale: true)
+        for projectedUsage in [57.0, 110.0, 250.0] {
+            let projection = QuotaUsageProjection(usedPercent: 35, projectedUsedPercent: projectedUsage)
+            let image = MenuBarQuotaMeter.image(remainingPercent: 65, isStale: false, projection: projection)
+            XCTAssertEqual(image.size, base.size, "Forecast changes must not move neighboring menu items")
+            XCTAssertNotEqual(image.tiffRepresentation, base.tiffRepresentation)
+            XCTAssertEqual(
+                MenuBarQuotaMeter.image(remainingPercent: 65, isStale: true, projection: projection).tiffRepresentation,
+                stale.tiffRepresentation,
+                "Cached data must not show a live forecast"
+            )
             let bitmap = try XCTUnwrap(image.representations.first as? NSBitmapImageRep)
             let scale = CGFloat(bitmap.pixelsWide) / image.size.width
-            var coloredPixels = 0
-            for x in Int(base.size.width * scale)..<bitmap.pixelsWide {
-                for y in 0..<bitmap.pixelsHigh {
+            var redPixels = 0
+            // Only the section beyond the fixed quota tick can show red overflow.
+            for x in Int(23 * scale)..<Int(27 * scale) {
+                for y in Int(5 * scale)..<Int(14 * scale) {
                     if let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.1,
                        color.redComponent > color.blueComponent + 0.1 {
-                        coloredPixels += 1
+                        redPixels += 1
                     }
                 }
             }
-            XCTAssertGreaterThan(coloredPixels, 10, "The forecast icon must be drawn in its warning color")
-            XCTAssertEqual(
-                MenuBarQuotaMeter.image(remainingPercent: 76, isStale: true, forecast: forecast).size,
-                base.size
-            )
-        }
-        for forecast in [QuotaExhaustionForecast.lastsUntilReset, .unavailable] {
-            XCTAssertEqual(MenuBarQuotaMeter.image(remainingPercent: 76, isStale: false, forecast: forecast).size, base.size)
+            if projectedUsage > 100 {
+                XCTAssertGreaterThan(redPixels, 0)
+            } else {
+                XCTAssertEqual(redPixels, 0)
+            }
         }
     }
 
@@ -74,7 +79,7 @@ final class AgentQuotaAppTests: XCTestCase {
         let full = MenuBarQuotaMeter.image(remainingPercent: 100, isStale: false)
         let stale = MenuBarQuotaMeter.image(remainingPercent: 91, isStale: true)
 
-        XCTAssertEqual(MenuBarQuotaMeter.maximumSize, NSSize(width: 44, height: 19))
+        XCTAssertEqual(MenuBarQuotaMeter.maximumSize.height, 19)
         XCTAssertEqual(loading.size, MenuBarQuotaMeter.maximumSize)
         XCTAssertEqual(full.size, MenuBarQuotaMeter.maximumSize)
         XCTAssertLessThan(partial.size.width, full.size.width)

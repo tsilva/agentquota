@@ -4,30 +4,23 @@ import SwiftUI
 
 @MainActor
 enum MenuBarQuotaMeter {
-    static let maximumSize = NSSize(width: 44, height: 19)
+    private static let iconRect = NSRect(x: 1, y: 5, width: 26, height: 9)
+    private static let valueX: CGFloat = 32
+    private static let height: CGFloat = 19
+    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    // Match the popover's fixed scale and reserve the last fifth for overflow.
+    private static let scaleMaximum = 125.0
 
-    private static let promptValueSpacing: CGFloat = 1.5
-    private static let progressInset: CGFloat = 2
-    private static let progressY: CGFloat = 1.25
-    private static let trackWidth: CGFloat = 1
-    private static let fillWidth: CGFloat = 1.5
-    private static let promptFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
-    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-    private static let warningWidth: CGFloat = 14
+    static var maximumSize: NSSize { size(value: "100%") }
 
     static func image(
         remainingPercent: Int?,
         isStale: Bool,
-        forecast: QuotaExhaustionForecast? = nil
+        projection: QuotaUsageProjection? = nil
     ) -> NSImage {
-        let percent = min(max(remainingPercent ?? 0, 0), 100)
-        let value = remainingPercent.map { "\($0)%" } ?? "—"
-        let meterSize = size(remainingPercent: remainingPercent)
-        let warning = isStale ? nil : forecast
-        let size = NSSize(
-            width: meterSize.width + (warning?.warningSymbolName == nil ? 0 : warningWidth),
-            height: meterSize.height
-        )
+        let percent = remainingPercent.map { min(max($0, 0), 100) }
+        let value = percent.map { "\($0)%" } ?? "—"
+        let size = percent == nil ? maximumSize : size(value: value)
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         guard
             let bitmap = NSBitmapImageRep(
@@ -51,10 +44,25 @@ enum MenuBarQuotaMeter {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.cgContext.scaleBy(x: scale, y: scale)
-        draw(percent: percent, value: value, isStale: isStale, size: meterSize)
-        if let warning {
-            drawWarning(warning, after: meterSize)
+        context.shouldAntialias = true
+        if isStale {
+            // A clock identifies cached data without implying a current forecast.
+            let symbol = NSImage(systemSymbolName: "clock", accessibilityDescription: "Cached quota")?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+                    .applying(NSImage.SymbolConfiguration(paletteColors: [.secondaryLabelColor])))
+            symbol?.draw(in: NSRect(x: 7, y: 3, width: 13, height: 13))
+        } else {
+            drawUsage(remainingPercent: percent, projection: projection)
         }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: valueFont,
+            .foregroundColor: isStale ? NSColor.secondaryLabelColor : NSColor.labelColor,
+        ]
+        let textSize = (value as NSString).size(withAttributes: attributes)
+        (value as NSString).draw(
+            at: NSPoint(x: valueX, y: floor((height - textSize.height) / 2)),
+            withAttributes: attributes
+        )
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: size)
@@ -63,111 +71,67 @@ enum MenuBarQuotaMeter {
         return image
     }
 
-    private static func drawWarning(_ forecast: QuotaExhaustionForecast, after meterSize: NSSize) {
-        guard let symbolName = forecast.warningSymbolName else {
-            return
+    private static func drawUsage(remainingPercent: Int?, projection: QuotaUsageProjection?) {
+        let outline = NSBezierPath(roundedRect: iconRect, xRadius: 3, yRadius: 3)
+        NSColor.labelColor.withAlphaComponent(0.16).setFill()
+        outline.fill()
+        NSGraphicsContext.saveGraphicsState()
+        outline.addClip()
+        if let remainingPercent {
+            let used = Double(100 - remainingPercent)
+            let actual = NSRect(x: iconRect.minX, y: iconRect.minY,
+                                width: iconRect.width * used / scaleMaximum, height: iconRect.height)
+            (remainingPercent == 0 ? NSColor.systemRed : NSColor.systemBlue).setFill()
+            actual.fill()
+            if let projection {
+                let start = iconRect.minX + actual.width
+                let end = iconRect.minX + iconRect.width * min(projection.projectedUsedPercent, 100) / scaleMaximum
+                drawForecast(in: NSRect(x: start, y: iconRect.minY,
+                                        width: max(end - start, 0), height: iconRect.height), color: .systemBlue)
+                if projection.overQuotaPercent > 0 {
+                    let limitX = iconRect.minX + iconRect.width * 100 / scaleMaximum
+                    let endpoint = iconRect.minX + iconRect.width * min(projection.projectedUsedPercent, scaleMaximum) / scaleMaximum
+                    drawForecast(in: NSRect(x: limitX, y: iconRect.minY,
+                                            width: max(endpoint - limitX, 0), height: iconRect.height), color: .systemRed)
+                }
+            }
         }
-        let color = forecast.warningColor
-        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: forecast.title)?
-            .withSymbolConfiguration(configuration)
-        symbol?.draw(in: NSRect(x: meterSize.width + 2, y: 4, width: 11, height: 11))
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.labelColor.withAlphaComponent(0.3).setStroke()
+        outline.lineWidth = 0.5
+        outline.stroke()
+
+        let limitX = iconRect.minX + iconRect.width * 100 / scaleMaximum
+        let limit = NSBezierPath()
+        limit.move(to: NSPoint(x: limitX, y: iconRect.minY - 1.5))
+        limit.line(to: NSPoint(x: limitX, y: iconRect.maxY + 1.5))
+        limit.lineWidth = 1
+        NSColor.labelColor.withAlphaComponent(0.8).setStroke()
+        limit.stroke()
     }
 
-    private static func draw(percent: Int, value: String, isStale: Bool, size: NSSize) {
-        NSGraphicsContext.current?.shouldAntialias = true
-        drawProgress(percent: percent, isStale: isStale, size: size)
-        drawContent(value: value, isStale: isStale, size: size)
-    }
-
-    private static func drawProgress(percent: Int, isStale: Bool, size: NSSize) {
-        let startX = progressInset
-        let endX = size.width - progressInset
-
-        let trackPath = NSBezierPath()
-        trackPath.move(to: NSPoint(x: startX, y: progressY))
-        trackPath.line(to: NSPoint(x: endX, y: progressY))
-        trackPath.lineWidth = trackWidth
-        trackPath.lineCapStyle = .round
-        NSColor.labelColor.withAlphaComponent(0.24).setStroke()
-        trackPath.stroke()
-
-        guard percent > 0 else {
-            return
+    private static func drawForecast(in rect: NSRect, color: NSColor) {
+        guard rect.width > 0 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: rect).addClip()
+        color.withAlphaComponent(0.4).setFill()
+        rect.fill()
+        NSColor.white.withAlphaComponent(0.35).setFill()
+        rect.fill()
+        color.withAlphaComponent(0.85).setStroke()
+        let stripes = NSBezierPath()
+        for x in stride(from: iconRect.minX - rect.height, through: rect.maxX, by: 3) {
+            stripes.move(to: NSPoint(x: x, y: rect.minY))
+            stripes.line(to: NSPoint(x: x + rect.height, y: rect.maxY))
         }
-
-        let fillPath = NSBezierPath()
-        let fillEndX = startX + (endX - startX) * CGFloat(percent) / 100
-        fillPath.move(to: NSPoint(x: startX, y: progressY))
-        fillPath.line(to: NSPoint(x: fillEndX, y: progressY))
-        fillPath.lineWidth = fillWidth
-        fillPath.lineCapStyle = .round
-        (isStale ? NSColor.systemOrange : NSColor.systemBlue).setStroke()
-        fillPath.stroke()
+        stripes.lineWidth = 0.75
+        stripes.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
-    private static func drawContent(value: String, isStale: Bool, size: NSSize) {
-        let textColor = isStale ? NSColor.systemOrange : NSColor.labelColor
-        let prompt = isStale ? "!" : ">_"
-
-        let promptAttributes: [NSAttributedString.Key: Any] = [
-            .font: promptFont,
-            .foregroundColor: textColor,
-        ]
-        let valueAttributes: [NSAttributedString.Key: Any] = [
-            .font: valueFont,
-            .foregroundColor: textColor,
-        ]
-        let promptSlotSize = (">_" as NSString).size(withAttributes: promptAttributes)
-        let promptSize = (prompt as NSString).size(withAttributes: promptAttributes)
-        let valueSize = (value as NSString).size(withAttributes: valueAttributes)
-        let contentWidth = promptSlotSize.width + promptValueSpacing + valueSize.width
-        let contentX = floor((size.width - contentWidth) / 2)
-
-        let promptRect = NSRect(
-            x: contentX + (promptSlotSize.width - promptSize.width) / 2,
-            y: floor((size.height - promptSize.height) / 2) + 1,
-            width: promptSize.width,
-            height: promptSize.height
-        )
-        (prompt as NSString).draw(in: promptRect, withAttributes: promptAttributes)
-
-        let valueRect = NSRect(
-            x: contentX + promptSlotSize.width + promptValueSpacing,
-            y: floor((size.height - valueSize.height) / 2) + 1,
-            width: valueSize.width,
-            height: valueSize.height
-        )
-        (value as NSString).draw(in: valueRect, withAttributes: valueAttributes)
-    }
-
-    private static func size(remainingPercent: Int?) -> NSSize {
-        guard let remainingPercent, remainingPercent < 100 else {
-            return maximumSize
-        }
-
-        let valueAttributes: [NSAttributedString.Key: Any] = [.font: valueFont]
-        let maximumValueWidth = ("100%" as NSString).size(withAttributes: valueAttributes).width
-        let valueWidth = ("\(remainingPercent)%" as NSString)
-            .size(withAttributes: valueAttributes)
-            .width
-        let reclaimedWidth = max(maximumValueWidth - valueWidth, 0)
-
-        return NSSize(
-            width: ceil(maximumSize.width - reclaimedWidth),
-            height: maximumSize.height
-        )
-    }
-}
-
-private extension QuotaExhaustionForecast {
-    var warningColor: NSColor {
-        switch self {
-        case .runsOut, .exhausted: return .systemRed
-        case .unusedAtReset: return .systemOrange
-        case .lastsUntilReset, .unavailable: return .labelColor
-        }
+    private static func size(value: String) -> NSSize {
+        let valueWidth = (value as NSString).size(withAttributes: [.font: valueFont]).width
+        return NSSize(width: ceil(valueX + valueWidth + 1), height: height)
     }
 }
 
@@ -374,15 +338,24 @@ final class AgentQuotaApp: NSObject, NSApplicationDelegate {
 
         let isStale = store.isSnapshotStale
         let warning = store.menuBarForecastWarning
+        let window = store.snapshot?.tightestWindow
+        let projection = store.connectionState.isConnected && !isStale
+            ? window?.usageProjection(relativeTo: store.currentDate) : nil
         button.image = MenuBarQuotaMeter.image(
-            remainingPercent: store.snapshot?.lowestRemainingPercent,
+            remainingPercent: window?.remainingPercent,
             isStale: isStale,
-            forecast: warning?.forecast
+            projection: projection
         )
         button.title = ""
         button.toolTip = isStale
             ? "Codex quota is stale: \(store.menuBarText) remaining"
             : "Codex quota: \(store.menuBarText) remaining"
+        if let window {
+            button.toolTip? += "\n\(window.durationLabel) quota · solid: used so far · striped: expected use · tick: quota limit"
+        }
+        if let projection {
+            button.toolTip? += "\n\(QuotaUsageProjection.percentDescription(projection.projectedUsedPercent)) expected usage by reset"
+        }
         if let warning {
             button.toolTip? += "\n\(warning.window.durationLabel) quota: \(warning.forecast.title)"
             button.toolTip? += "\n\(warning.forecast.detailDescription(relativeTo: store.currentDate))"
