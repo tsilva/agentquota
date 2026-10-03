@@ -29,6 +29,9 @@ jobs:
           xcodebuild -version
           xcrun swift --version
 
+      - name: Check release dispatch and publication safeguards
+        run: python3 -m unittest discover -s tests -v
+
       - name: Build Release
         run: |
           xcodebuild build \

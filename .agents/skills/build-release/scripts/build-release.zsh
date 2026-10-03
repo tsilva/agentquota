@@ -2,283 +2,40 @@
 
 set -euo pipefail
 
-program_name="${0:t}"
-
-usage() {
-    print -u2 "Usage: ${program_name} [--dry-run]"
-    print -u2 "The release version is selected automatically from Git history."
-}
-
 fail() {
     print -u2 "error: $*"
     exit 1
 }
 
-require_command() {
-    command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
-}
-
-typeset -i dry_run=0
+publish=true
 case "${1:-}" in
     --dry-run)
-        dry_run=1
+        publish=false
         shift
         ;;
     -h|--help)
-        usage
+        print "Usage: ${0:t} [--dry-run]"
+        print "Dispatch an AgentQuota release in GitHub Actions; --dry-run validates without publishing."
         exit 0
         ;;
 esac
+[[ $# -eq 0 ]] || fail "Version arguments are not accepted; versioning is automatic"
 
-if [[ $# -ne 0 ]]; then
-    usage
-    fail "Version arguments are not accepted; versioning is automatic"
-fi
-
-for command_name in awk cmp codesign ditto gh git grep hdiutil head lipo plutil readlink shasum sips xcodebuild xcrun; do
-    require_command "$command_name"
+for command_name in gh git; do
+    command -v "$command_name" >/dev/null 2>&1 || fail "Required command not found: $command_name"
 done
-
 script_directory="${0:A:h}"
 repository_root="$(git -C "$script_directory" rev-parse --show-toplevel)"
-background_renderer="${script_directory}/render-dmg-background.swift"
-layout_template="${script_directory:h}/assets/dmg-layout.DS_Store"
-[[ -f "$background_renderer" ]] || fail "DMG background renderer not found: ${background_renderer}"
-[[ -f "$layout_template" ]] || fail "DMG Finder layout template not found: ${layout_template}"
 cd "$repository_root"
-
-[[ "$(git branch --show-current)" == "main" ]] || fail "Releases must be built from main"
-
-if [[ $dry_run -eq 0 && -n "$(git status --porcelain)" ]]; then
-    fail "The worktree must be clean before publishing"
-fi
-
+[[ "$(git branch --show-current)" == "main" ]] || fail "Dispatch releases from main"
+[[ -z "$(git status --porcelain)" ]] || fail "The worktree must be clean before dispatch"
 gh auth status --hostname github.com >/dev/null
 git fetch origin main --tags
-
-head_sha="$(git rev-parse HEAD)"
-origin_main_sha="$(git rev-parse origin/main)"
-[[ "$head_sha" == "$origin_main_sha" ]] || fail "Local main must exactly match origin/main"
-
-latest_release_tag="$(
-    git tag --list 'v*' --sort=-version:refname \
-        | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
-        | head -n 1 \
-        || true
-)"
-
-if [[ -z "$latest_release_tag" ]]; then
-    project_marketing_version="$(
-        xcodebuild \
-            -project AgentQuota.xcodeproj \
-            -scheme AgentQuota \
-            -configuration Release \
-            -showBuildSettings 2>/dev/null \
-            | awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }'
-    )"
-
-    if print -r -- "$project_marketing_version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
-        release_version="$project_marketing_version"
-    elif print -r -- "$project_marketing_version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
-        release_version="${project_marketing_version}.0"
-    else
-        fail "Xcode MARKETING_VERSION must be MAJOR.MINOR or MAJOR.MINOR.PATCH; found: ${project_marketing_version:-<empty>}"
-    fi
-    version_reason="first release, normalized from Xcode MARKETING_VERSION ${project_marketing_version}"
-else
-    git merge-base --is-ancestor "$latest_release_tag" HEAD \
-        || fail "Latest version tag ${latest_release_tag} is not an ancestor of HEAD"
-
-    changed_files="$(git diff --name-only "${latest_release_tag}..HEAD")"
-    releasable_changes="$(
-        print -r -- "$changed_files" \
-            | grep -E '^(AgentQuota/|AgentQuota\.xcodeproj/)' \
-            || true
-    )"
-    [[ -n "$releasable_changes" ]] \
-        || fail "No releasable app changes exist after ${latest_release_tag}"
-
-    commit_subjects="$(git log --format='%s' "${latest_release_tag}..HEAD")"
-    commit_messages="$(git log --format='%s%n%b%n' "${latest_release_tag}..HEAD")"
-
-    version_bump="patch"
-    version_reason="other app or Xcode project changes after ${latest_release_tag}"
-
-    if print -r -- "$commit_messages" \
-        | grep -Eiq '^(BREAKING[ -]CHANGE:|[[:alnum:]_-]+(\([^)]*\))?!:)'; then
-        version_bump="major"
-        version_reason="breaking-change commit marker after ${latest_release_tag}"
-    elif print -r -- "$commit_subjects" \
-        | grep -Eiq '^feat(\([^)]*\))?:'; then
-        version_bump="minor"
-        version_reason="conventional feature commit after ${latest_release_tag}"
-    elif print -r -- "$changed_files" | grep -Eq '^AgentQuota/.*\.swift$' \
-        && print -r -- "$commit_subjects" \
-            | grep -Eiq '^(Add|Implement|Introduce|Create|Support|Enable|Expose)([[:space:]:]|$)'; then
-        version_bump="minor"
-        version_reason="feature-style runtime Swift change after ${latest_release_tag}"
-    fi
-
-    version_components="${latest_release_tag#v}"
-    IFS=. read -r version_major version_minor version_patch <<< "$version_components"
-    case "$version_bump" in
-        major)
-            release_version="$((version_major + 1)).0.0"
-            ;;
-        minor)
-            release_version="${version_major}.$((version_minor + 1)).0"
-            ;;
-        patch)
-            release_version="${version_major}.${version_minor}.$((version_patch + 1))"
-            ;;
-    esac
-fi
-
-release_tag="v${release_version}"
-print "Automatically selected ${release_tag}: ${version_reason}"
-
-if git show-ref --verify --quiet "refs/tags/${release_tag}"; then
-    fail "Tag already exists: ${release_tag}"
-fi
-
+release_sha="$(git rev-parse HEAD)"
+[[ "$release_sha" == "$(git rev-parse origin/main)" ]] || fail "Local main must exactly match origin/main"
 repository_slug="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"
-if gh release view "$release_tag" --repo "$repository_slug" >/dev/null 2>&1; then
-    fail "GitHub Release already exists: ${release_tag}"
-fi
 
-release_workspace="$(mktemp -d "${TMPDIR:-/tmp}/agentquota-release.XXXXXX")"
-typeset -i dmg_attached=0
-validation_mountpoint=""
-cleanup() {
-    if [[ $dmg_attached -eq 1 && -n "$validation_mountpoint" ]]; then
-        hdiutil detach "$validation_mountpoint" >/dev/null 2>&1 || true
-    fi
-    if [[ -n "${release_workspace:-}" && -d "$release_workspace" ]]; then
-        rm -rf -- "$release_workspace"
-    fi
-}
-trap cleanup EXIT
-
-derived_data_path="${release_workspace}/DerivedData"
-output_directory="${release_workspace}/output"
-dmg_source_directory="${release_workspace}/dmg-root"
-validation_mountpoint="${release_workspace}/dmg-validation"
-mkdir -p "$output_directory" "$dmg_source_directory/.background" "$validation_mountpoint"
-
-print "Testing AgentQuota at ${head_sha}"
-xcodebuild test \
-    -project AgentQuota.xcodeproj \
-    -scheme AgentQuota \
-    -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$derived_data_path" \
-    -quiet
-
-build_number="$(git rev-list --count HEAD)"
-print "Building AgentQuota ${release_version} (${build_number})"
-xcodebuild build \
-    -project AgentQuota.xcodeproj \
-    -scheme AgentQuota \
-    -configuration Release \
-    -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$derived_data_path" \
-    -quiet \
-    MARKETING_VERSION="$release_version" \
-    CURRENT_PROJECT_VERSION="$build_number"
-
-app_path="${derived_data_path}/Build/Products/Release/AgentQuota.app"
-info_plist="${app_path}/Contents/Info.plist"
-binary_path="${app_path}/Contents/MacOS/AgentQuota"
-[[ -d "$app_path" ]] || fail "Release app was not produced at ${app_path}"
-
-codesign --verify --deep --strict --verbose=2 "$app_path"
-
-bundle_identifier="$(plutil -extract CFBundleIdentifier raw -o - "$info_plist")"
-bundle_version="$(plutil -extract CFBundleShortVersionString raw -o - "$info_plist")"
-bundle_build="$(plutil -extract CFBundleVersion raw -o - "$info_plist")"
-is_menu_bar_app="$(plutil -extract LSUIElement raw -o - "$info_plist")"
-binary_architectures="$(lipo -archs "$binary_path")"
-
-[[ "$bundle_identifier" == "com.tsilva.AgentQuota" ]] || fail "Unexpected bundle identifier: ${bundle_identifier}"
-[[ "$bundle_version" == "$release_version" ]] || fail "Unexpected bundle version: ${bundle_version}"
-[[ "$bundle_build" == "$build_number" ]] || fail "Unexpected bundle build: ${bundle_build}"
-[[ "$is_menu_bar_app" == "true" ]] || fail "LSUIElement is not enabled"
-[[ "$binary_architectures" == "arm64" ]] || fail "Expected arm64 binary, found: ${binary_architectures}"
-
-artifact_name="AgentQuota-${release_version}-macOS-arm64.dmg"
-artifact_path="${output_directory}/${artifact_name}"
-checksum_path="${artifact_path}.sha256"
-background_path="${dmg_source_directory}/.background/installer-background.png"
-volume_name="AgentQuota Installer"
-
-ditto "$app_path" "${dmg_source_directory}/AgentQuota.app"
-ln -s /Applications "${dmg_source_directory}/Applications"
-ditto "$layout_template" "${dmg_source_directory}/.DS_Store"
-xcrun swift "$background_renderer" "$background_path" "$release_version"
-background_width="$(sips -g pixelWidth "$background_path" | awk '/pixelWidth:/ { print $2 }')"
-background_height="$(sips -g pixelHeight "$background_path" | awk '/pixelHeight:/ { print $2 }')"
-[[ "$background_width" == "700" && "$background_height" == "440" ]] \
-    || fail "Unexpected DMG background dimensions: ${background_width}x${background_height}"
-
-hdiutil create \
-    -volname "$volume_name" \
-    -srcfolder "$dmg_source_directory" \
-    -format UDZO \
-    -ov \
-    "$artifact_path" >/dev/null
-hdiutil verify "$artifact_path" >/dev/null
-hdiutil attach \
-    "$artifact_path" \
-    -readonly \
-    -nobrowse \
-    -noautoopen \
-    -mountpoint "$validation_mountpoint" >/dev/null
-dmg_attached=1
-
-packaged_app_path="${validation_mountpoint}/AgentQuota.app"
-packaged_info_plist="${packaged_app_path}/Contents/Info.plist"
-packaged_binary_path="${packaged_app_path}/Contents/MacOS/AgentQuota"
-[[ -d "$packaged_app_path" ]] || fail "DMG does not contain AgentQuota.app"
-[[ -L "${validation_mountpoint}/Applications" ]] || fail "DMG does not contain an Applications shortcut"
-[[ -f "${validation_mountpoint}/.background/installer-background.png" ]] \
-    || fail "DMG does not contain its Finder background"
-[[ -f "${validation_mountpoint}/.DS_Store" ]] || fail "DMG does not contain its Finder layout metadata"
-cmp -s "$layout_template" "${validation_mountpoint}/.DS_Store" \
-    || fail "DMG Finder layout metadata differs from the validated template"
-[[ "$(readlink "${validation_mountpoint}/Applications")" == "/Applications" ]] \
-    || fail "DMG Applications shortcut has an unexpected target"
-codesign --verify --deep --strict --verbose=2 "$packaged_app_path"
-[[ "$(plutil -extract CFBundleShortVersionString raw -o - "$packaged_info_plist")" == "$release_version" ]] \
-    || fail "DMG contains an unexpected app version"
-[[ "$(lipo -archs "$packaged_binary_path")" == "arm64" ]] \
-    || fail "DMG contains an app with an unexpected architecture"
-
-hdiutil detach "$validation_mountpoint" >/dev/null
-dmg_attached=0
-(
-    cd "$output_directory"
-    shasum -a 256 "$artifact_name" > "${artifact_name}.sha256"
-)
-
-if [[ $dry_run -eq 1 ]]; then
-    print "Dry run passed for automatically selected ${release_tag}; nothing was published."
-    print "Artifact: ${artifact_name}"
-    print "Checksum: ${artifact_name}.sha256"
-    exit 0
-fi
-
-release_notice=$'Developer build for Apple silicon Macs running macOS 26. Open the DMG and drag AgentQuota to Applications. This app is ad-hoc signed and not notarized, so macOS may require opening it via right-click > Open or allowing it in System Settings > Privacy & Security.\n\nInstall the Codex CLI and run `codex login` before launching AgentQuota.'
-
-print "Publishing ${release_tag} to ${repository_slug}"
-gh release create "$release_tag" \
-    "$artifact_path" \
-    "$checksum_path" \
-    --repo "$repository_slug" \
-    --target "$head_sha" \
-    --title "AgentQuota ${release_version}" \
-    --generate-notes \
-    --notes "$release_notice" \
-    --fail-on-no-commits \
-    --latest
-
-release_url="$(gh release view "$release_tag" --repo "$repository_slug" --json url --jq '.url')"
-print "Published ${release_tag}: ${release_url}"
+gh workflow run release.yml --repo "$repository_slug" --ref main \
+    -f ref="$release_sha" -f publish="$publish"
+print "Dispatched release.yml for ${repository_slug} at ${release_sha} (publish=${publish})."
+print "Follow the workflow_dispatch run for this exact SHA; dispatch alone does not prove success."
