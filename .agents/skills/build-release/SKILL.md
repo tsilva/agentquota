@@ -1,6 +1,6 @@
 ---
 name: build-release
-description: Automatically version, build, verify, package, and publish AgentQuota as a public GitHub Release. Use for AgentQuota release requests, not ordinary local builds or installation.
+description: Dispatch, monitor, and verify automatically versioned AgentQuota releases built and published in GitHub Actions. Use for AgentQuota release requests, not ordinary local builds or installation.
 ---
 
 # Build Release
@@ -17,7 +17,7 @@ ad-hoc-signed developer builds for macOS 26; they are not notarized.
 
 ## Automatic versioning
 
-Do not ask the user for a version. The bundled script selects the next stable
+Do not ask the user for a version. The Actions build helper selects the next stable
 semantic version from the latest reachable `vMAJOR.MINOR.PATCH` tag and the
 changes since that tag:
 
@@ -46,31 +46,59 @@ versioning and packaging without publishing.
 
 ## Workflow
 
-Run the bundled script from the repository root:
+All release tests, compilation, signing, DMG packaging, artifact validation, and
+publication run in `.github/workflows/release.yml`. The operator machine needs
+only Git and authenticated `gh`; do not run Xcode or the build helper locally.
+Editing release instructions does not authorize publication.
+
+From a clean `main` synchronized with `origin/main`, dispatch publication:
 
 ```bash
 .agents/skills/build-release/scripts/build-release.zsh
 ```
 
-For validation without a GitHub mutation:
+For validation without creating a tag or GitHub Release:
 
 ```bash
 .agents/skills/build-release/scripts/build-release.zsh --dry-run
 ```
 
-The script owns the release sequence: repository and GitHub preflight,
-automatic version selection, tests, isolated Release build, version injection,
-signature and bundle validation, compressed read-only DMG creation and mounted
-content validation, SHA-256 creation, and `gh release create`. The DMG opens as
-a compact branded drag-to-install window with large `AgentQuota.app` and
-Applications icons, a directional background, and persisted Finder layout
-metadata generated without Finder automation. Do not duplicate those steps
-manually or change project version files for a release.
+The launcher submits the exact full commit SHA with `publish=true` or `false`.
+Both modes run in Actions. Manual dispatch defaults to `publish=false` and must
+use the workflow on `main` with the same full SHA as `origin/main`. When there
+are no app changes since the latest release, validation rebuilds that version;
+publication fails without creating a new release. Do not change project version
+files or create a tag locally.
 
-Upload release assets without GitHub display labels so the Assets list shows
-their complete filenames, including the version, platform, architecture, and
-checksum suffix.
+The macOS job uses the same macOS 26 / Xcode 26.6 toolchain as CI. Its
+`scripts/build-release-ci.zsh` helper owns automatic versioning, tests, an
+isolated Release build, version injection, signature and bundle checks, DMG
+creation and mounted-content validation, and SHA-256 creation. The DMG retains
+its branded drag-to-install background and persisted Finder layout. The job
+uploads its validated DMG and checksum as `agentquota-<full-sha>`.
 
-The script creates the release directly with `gh release create`; there is no
-Actions publication run to monitor. Verify the selected tag's published GitHub
-Release and DMG/checksum assets using the shared completion checks.
+Only the separate publication job has `contents: write`. It downloads those
+exact artifacts, verifies their filenames and checksum, confirms that `main`
+still matches the release SHA and the tag/version remain unused, then creates
+the tag and GitHub Release. Upload assets without GitHub display labels so the
+Assets list shows their complete filenames. Never rebuild between validation
+and publication or substitute assets from another run.
+
+## Monitor and verify
+
+Follow the shared monitoring procedure for the `release.yml`
+`workflow_dispatch` run on `main` at the dispatched full SHA. Inspect its inputs
+when distinguishing validation from publication. Require the build job and,
+for publication, the publish job to succeed; dispatch alone is not completion.
+
+On failure, report the exact failed job and run URL. Preserve existing releases
+and do not automatically repeat publication. A published release whose final
+verification failed remains incomplete and needs inspection.
+
+The publication job verifies the tag's exact source SHA and downloads fresh
+copies of `AgentQuota-<version>-macOS-arm64.dmg` and its `.sha256` file. It
+compares the published checksum with the validated candidate and checks the
+fresh DMG against it. Require that verification before reporting success.
+Report the release URL, version/tag, full SHA, workflow URL, asset names, and
+ad-hoc signing / non-notarization status. For validation, report the successful
+run and its artifact download location and state that nothing was published.

@@ -30,6 +30,22 @@ xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platfo
 xcodebuild -project AgentQuota.xcodeproj -scheme AgentQuota -destination 'platform=macOS' test   # run the tests
 ```
 
+## Releases
+
+Release builds run in GitHub Actions on macOS 26 with Xcode 26.6. From a clean,
+synchronized `main` checkout with authenticated `gh`, run:
+
+```bash
+.agents/skills/build-release/scripts/build-release.zsh            # publish the next app release
+.agents/skills/build-release/scripts/build-release.zsh --dry-run  # validate in Actions without publishing
+```
+
+The workflow selects the version from Git history, tests and packages the app,
+and publishes the validated DMG and SHA-256 checksum to
+[GitHub Releases](https://github.com/tsilva/agentquota/releases). The local command
+only dispatches the workflow; it does not build the app. Documentation-, skill-,
+and test-only changes do not create a new app release.
+
 ## Notes
 
 - On first launch, AgentQuota checks standard Codex installation paths before `PATH` and wrapper locations, then saves the selected executable in `~/.agentquota/config.json`.

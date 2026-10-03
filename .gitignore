@@ -15,5 +15,8 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
+# Release helper test caches
+__pycache__/
+
 # Local macOS metadata
 .DS_Store
