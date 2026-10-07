@@ -1,7 +1,9 @@
 <p align="center">
   <img src="logo.png" alt="AgentQuota" width="520" />
   <br />
+  <!-- repo-tagline:start -->
   <strong>🤖 Know your Codex quota at a glance 📊</strong>
+  <!-- repo-tagline:end -->
 </p>
 
 AgentQuota is a native macOS menu-bar app for developers who use Codex. It keeps the tightest active subscription quota visible and opens a compact breakdown of every available quota window, reset time, run-out forecast, and connection state.
