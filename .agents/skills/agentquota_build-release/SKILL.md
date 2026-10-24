@@ -1,5 +1,5 @@
 ---
-name: build-release
+name: agentquota_build-release
 description: Dispatch, monitor, and verify automatically versioned AgentQuota releases built and published in GitHub Actions. Use for AgentQuota release requests, not ordinary local builds or installation.
 ---
 
@@ -54,13 +54,13 @@ Editing release instructions does not authorize publication.
 From a clean `main` synchronized with `origin/main`, dispatch publication:
 
 ```bash
-.agents/skills/build-release/scripts/build-release.zsh
+.agents/skills/agentquota_build-release/scripts/build-release.zsh
 ```
 
 For validation without creating a tag or GitHub Release:
 
 ```bash
-.agents/skills/build-release/scripts/build-release.zsh --dry-run
+.agents/skills/agentquota_build-release/scripts/build-release.zsh --dry-run
 ```
 
 The launcher submits the exact full commit SHA with `publish=true` or `false`.

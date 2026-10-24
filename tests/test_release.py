@@ -10,7 +10,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = Path('.agents/skills/build-release/scripts')
+SCRIPTS = Path('.agents/skills/agentquota_build-release/scripts')
 
 
 def workflow_script(name):

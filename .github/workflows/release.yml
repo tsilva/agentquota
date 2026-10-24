@@ -47,7 +47,7 @@ jobs:
 
       - name: Select version, test, build and validate DMG
         id: build
-        run: .agents/skills/build-release/scripts/build-release-ci.zsh "$RUNNER_TEMP/agentquota-release-artifacts"
+        run: .agents/skills/agentquota_build-release/scripts/build-release-ci.zsh "$RUNNER_TEMP/agentquota-release-artifacts"
 
       - name: Preserve validated DMG and checksum
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

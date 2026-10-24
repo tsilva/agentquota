@@ -38,8 +38,8 @@ Release builds run in GitHub Actions on macOS 26 with Xcode 26.6. From a clean,
 synchronized `main` checkout with authenticated `gh`, run:
 
 ```bash
-.agents/skills/build-release/scripts/build-release.zsh            # publish the next app release
-.agents/skills/build-release/scripts/build-release.zsh --dry-run  # validate in Actions without publishing
+.agents/skills/agentquota_build-release/scripts/build-release.zsh            # publish the next app release
+.agents/skills/agentquota_build-release/scripts/build-release.zsh --dry-run  # validate in Actions without publishing
 ```
 
 The workflow selects the version from Git history, tests and packages the app,
